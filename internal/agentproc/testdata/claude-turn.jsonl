@@ -1,0 +1,4 @@
+{"type":"system","subtype":"init","session_id":"sess-abc"}
+{"type":"assistant","session_id":"sess-abc","message":{"content":[{"type":"tool_use","name":"Bash","input":{"command":"git status"}}]}}
+{"type":"assistant","session_id":"sess-abc","message":{"content":[{"type":"text","text":"Hello! Working tree is clean."}]}}
+{"type":"result","subtype":"success","session_id":"sess-abc","result":"Hello! Working tree is clean.","is_error":false,"total_cost_usd":0.012}

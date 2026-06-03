@@ -1,0 +1,6 @@
+Reading additional input from stdin...
+{"type":"thread.started","thread_id":"th-xyz"}
+{"type":"turn.started"}
+{"type":"item.completed","item":{"id":"item_0","type":"command_execution","command":"git status"}}
+{"type":"item.completed","item":{"id":"item_1","type":"agent_message","text":"Hello! All good."}}
+{"type":"turn.completed","usage":{"input_tokens":11367,"cached_input_tokens":9600,"output_tokens":6}}

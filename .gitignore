@@ -1,0 +1,9 @@
+# build output
+/quack
+
+# local secrets / overrides
+*.local.toml
+config.toml
+
+# editor
+.DS_Store

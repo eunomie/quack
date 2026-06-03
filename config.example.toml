@@ -1,0 +1,36 @@
+# Copy to ~/.config/quack/config.toml and fill in.
+# The token may instead come from the DISCORD_BOT_TOKEN env var (preferred).
+dev_src_root   = "~/dev/src"
+scratch_dir    = "~/dev/work"  # workspace for no-target "quick question" sessions; created if missing
+state_dir      = "~/.local/state/quack"
+clone_protocol = "ssh" # or "https"
+default_agent  = "claude"
+name_agent     = "claude"     # agent used to auto-name sessions (best summarizer)
+# infer_agent = "claude"        # agent for the default fluent (natural-language) path (default: name_agent)
+# infer_effort = "medium"       # effort for the infer one-shot; lower = faster (low|medium|high|xhigh)
+# infer_history_limit = 20      # recent channel messages fed to the infer agent for context
+
+[discord]
+# token = "..." # prefer DISCORD_BOT_TOKEN env instead
+allowed_user_id  = "YOUR_DISCORD_USER_ID"
+allowed_guild_id = "YOUR_GUILD_ID"
+# allowed_channel_id = "OPTIONAL_CHANNEL_ID"
+thread_auto_archive_minutes = 10080 # Discord allows only 60, 1440, 4320, or 10080 (7 days)
+
+[agents.claude]
+command         = "claude"
+effort_template = "--effort {effort}"
+name_template   = "-n {name}"          # set the claude session display name
+resume_template = "--resume {session}" # resume a session interactively (used by /attach)
+default_effort  = "xhigh"              # used when the command gives no effort=
+headless        = true                 # has a headless driver (headless is the default mode)
+permission_mode = "auto"              # autonomous + auto-vetted (≈ codex on-request); also: acceptEdits | bypassPermissions
+# allowed_tools = "Bash(git *),Read,Edit,Write"  # optional; with permission_mode=auto, leave unset to let auto govern
+# settings = '{"sandbox":{"enabled":true,"autoAllowBashIfSandboxed":true,"network":{"allowedDomains":["*"]}}}'  # `claude --settings` passthrough (any claude setting). NOTE: enabling the OS sandbox breaks `git commit` inside worktrees — the shared .git lives outside the workspace and isn't writable — so it's left off; permission_mode=auto does the vetting.
+# interactive_args = "--dangerously-skip-permissions"  # extra flags for interactive (no-headless) and /attach launches only — NOT headless (governed by permission_mode). Defaults to this for claude when unset; set to "" to disable, or to other flags to override.
+
+[agents.codex]
+command         = "codex"
+effort_template = "--config model_reasoning_effort={effort}"
+resume_template = "resume {session}"
+headless        = true

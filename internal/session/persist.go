@@ -1,0 +1,162 @@
+package session
+
+import (
+	"context"
+	"encoding/json"
+	"os"
+	"path/filepath"
+)
+
+// sessionRecord is the durable state of a headless session, written under
+// state_dir/sessions/<name>/session.json so the session survives a restart of
+// the quack service. The agent's own conversation history (claude's session
+// jsonl, codex's thread) persists independently on disk; SessionRef is the
+// opaque token that resumes it. Everything else here is what's needed to
+// rebuild the in-memory liveSession and keep posting to the right Discord
+// thread.
+//
+// Interactive (tmux) sessions need no record: they run detached, independent of
+// this process, and already outlive a restart.
+type sessionRecord struct {
+	Name          string `json:"name"`
+	Label         string `json:"label"` // workspace label for the thread title (owner/repo or dir)
+	AgentName     string `json:"agent_name"`
+	Workdir       string `json:"workdir"`
+	Effort        string `json:"effort"`
+	ThreadID      string `json:"thread_id"`
+	RootChannelID string `json:"root_channel_id"`
+	RootMessageID string `json:"root_message_id"`
+	SessionRef    string `json:"session_ref"`
+}
+
+// record snapshots the session's durable state. The non-ref fields are set once
+// at construction; SessionRef is guarded by mu (updated after each turn).
+func (ls *liveSession) record() sessionRecord {
+	ls.mu.Lock()
+	defer ls.mu.Unlock()
+	return sessionRecord{
+		Name:          ls.name,
+		Label:         ls.label,
+		AgentName:     ls.agentName,
+		Workdir:       ls.workdir,
+		Effort:        ls.effort,
+		ThreadID:      ls.threadID,
+		RootChannelID: ls.rootChannelID,
+		RootMessageID: ls.rootMessageID,
+		SessionRef:    ls.sessionRef,
+	}
+}
+
+func (s *Service) recordPath(name string) string {
+	return filepath.Join(s.cfg.StateDir, "sessions", name, "session.json")
+}
+
+// persistRecord writes the session's durable state. Best-effort: failing to
+// persist costs only resilience across a restart, never the turn itself.
+func (s *Service) persistRecord(rec sessionRecord) {
+	data, err := json.MarshalIndent(rec, "", "  ")
+	if err != nil {
+		return
+	}
+	_ = s.mkdirAll(filepath.Join(s.cfg.StateDir, "sessions", rec.Name), 0o755)
+	_ = s.writeFile(s.recordPath(rec.Name), data, 0o644)
+}
+
+// removeRecord drops a session's durable state once it ends or is promoted to
+// tmux, so a later restart doesn't resurrect it.
+func (s *Service) removeRecord(name string) { _ = s.remove(s.recordPath(name)) }
+
+// newSession builds a liveSession from a record, registers it under its thread,
+// and starts its runLoop. It does NOT enqueue a turn: startHeadless adds the
+// first turn; a rehydrated session waits for the next Discord message.
+func (s *Service) newSession(ctx context.Context, rec sessionRecord) *liveSession {
+	turnCtx, cancel := context.WithCancel(ctx)
+	ls := &liveSession{
+		driver:    s.drivers[rec.AgentName],
+		agentName: rec.AgentName,
+		workdir:   rec.Workdir,
+		effort:    rec.Effort,
+		name:      rec.Name,
+		label:     rec.Label,
+		threadID:  rec.ThreadID,
+
+		sessionRef:    rec.SessionRef,
+		rootChannelID: rec.RootChannelID,
+		rootMessageID: rec.RootMessageID,
+
+		queue:  make(chan turnReq, 32),
+		done:   make(chan struct{}),
+		stop:   make(chan struct{}),
+		cancel: cancel,
+		title:  newTitleUpdater(s.reply, rec.ThreadID, rec.Name, rec.Label),
+	}
+
+	s.hmu.Lock()
+	if s.sessions == nil {
+		s.sessions = map[string]*liveSession{}
+	}
+	s.sessions[rec.ThreadID] = ls
+	s.hmu.Unlock()
+
+	go s.runLoop(turnCtx, ls)
+	return ls
+}
+
+// Rehydrate restores headless sessions persisted by a previous run so they keep
+// working across a restart of the quack service. For each record it rebuilds the
+// in-memory session and resumes the agent on the next Discord message in the
+// thread — no past turn is replayed, but it posts a random "I'm back" greeting
+// so you can see the session survived the restart. Records whose worktree is
+// gone or whose agent driver is no longer configured are skipped. Returns the
+// number restored.
+//
+// Call it once at startup, before the Discord gateway opens, so no incoming
+// command or thread message races the rebuild.
+func (s *Service) Rehydrate(ctx context.Context) int {
+	root := filepath.Join(s.cfg.StateDir, "sessions")
+	names, err := s.readDir(root)
+	if err != nil {
+		return 0 // no state dir yet (fresh install) — nothing to restore
+	}
+	restored := 0
+	for _, name := range names {
+		data, err := s.readFile(filepath.Join(root, name, "session.json"))
+		if err != nil {
+			continue // dir without a record (e.g. attachments-only) — skip
+		}
+		var rec sessionRecord
+		if json.Unmarshal(data, &rec) != nil {
+			continue
+		}
+		if rec.ThreadID == "" || rec.Name == "" {
+			continue
+		}
+		if _, ok := s.drivers[rec.AgentName]; !ok {
+			continue // agent no longer configured
+		}
+		if !s.git.PathExists(rec.Workdir) {
+			continue // worktree removed: nothing to resume into
+		}
+		s.newSession(ctx, rec)
+		// Greet the thread so you can tell the session came back alive after the
+		// restart. Best-effort: a failed post never blocks the restore.
+		_, _ = s.reply.Post(ctx, rec.ThreadID, randomBackMessage())
+		restored++
+	}
+	return restored
+}
+
+// readSubdirs lists the immediate subdirectory names under path.
+func readSubdirs(path string) ([]string, error) {
+	entries, err := os.ReadDir(path)
+	if err != nil {
+		return nil, err
+	}
+	names := make([]string, 0, len(entries))
+	for _, e := range entries {
+		if e.IsDir() {
+			names = append(names, e.Name())
+		}
+	}
+	return names, nil
+}

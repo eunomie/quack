@@ -1,0 +1,17 @@
+[Unit]
+Description=quack Discord agent-launcher bot
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+# Token kept out of the unit; use an EnvironmentFile with chmod 600.
+EnvironmentFile=%h/.config/quack/env
+# Ensure agent CLIs, git, and tmux are on PATH for the service.
+Environment=PATH=%h/.local/bin:/usr/local/bin:/usr/bin:/bin
+ExecStart=%h/.local/bin/quack --config %h/.config/quack/config.toml
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=default.target
