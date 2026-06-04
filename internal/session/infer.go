@@ -137,6 +137,14 @@ func (s *Service) recentHistory(ctx context.Context, o Origin) string {
 		b.WriteString(text)
 		b.WriteByte('\n')
 	}
+	// The replied-to message may predate the fetched window; surface it
+	// explicitly so references like "this feedback" resolve against its content.
+	if text := strings.TrimSpace(o.RepliedToContent); text != "" {
+		if r := []rune(text); len(r) > 400 {
+			text = string(r[:400]) + "…"
+		}
+		fmt.Fprintf(&b, "%s (replied to by %s): %s\n", o.RepliedToAuthor, o.Author, text)
+	}
 	return strings.TrimSpace(b.String())
 }
 

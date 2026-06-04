@@ -18,6 +18,13 @@ type Origin struct {
 	AuthorID  string
 	Author    string
 	CreatedAt string // RFC3339
+
+	// RepliedTo* capture the message the triggering message is a Discord reply
+	// to, when present. This lets the agent see the original message's content
+	// (e.g. feedback being replied to with "address this"), not just its ID.
+	RepliedToID      string
+	RepliedToAuthor  string
+	RepliedToContent string
 }
 
 // Permalink returns a Discord deep-link to the triggering message.
@@ -26,8 +33,11 @@ func (o Origin) Permalink() string {
 }
 
 // PromptHeader renders the <quack-context> block prepended to the agent prompt.
+// When the triggering message is a reply to another message, a
+// <quack-replied-to> block carrying that message's content is appended so the
+// agent can act on what was replied to without needing to fetch it.
 func (o Origin) PromptHeader() string {
-	return fmt.Sprintf(`<quack-context>
+	header := fmt.Sprintf(`<quack-context>
 guild_id: %s   channel_id: %s   thread_id: %s
 message_id: %s   reply_message_id: %s
 author: %s (id %s)
@@ -37,6 +47,16 @@ permalink: %s
 		o.MessageID, o.ReplyID,
 		o.Author, o.AuthorID,
 		o.Permalink())
+	if content := strings.TrimSpace(o.RepliedToContent); content != "" {
+		header += fmt.Sprintf(`
+
+<quack-replied-to>
+The triggering message is a Discord reply to this message (message_id: %s) from %s:
+
+%s
+</quack-replied-to>`, o.RepliedToID, o.RepliedToAuthor, content)
+	}
+	return header
 }
 
 // EnvVars returns the QUACK_* environment for the tmux session.
@@ -66,6 +86,11 @@ func (o Origin) ContextJSON(sessionName string) ([]byte, error) {
 		"author":           o.Author,
 		"created_at":       o.CreatedAt,
 		"permalink":        o.Permalink(),
+	}
+	if o.RepliedToID != "" {
+		doc["replied_to_message_id"] = o.RepliedToID
+		doc["replied_to_author"] = o.RepliedToAuthor
+		doc["replied_to_content"] = o.RepliedToContent
 	}
 	return json.MarshalIndent(doc, "", "  ")
 }
