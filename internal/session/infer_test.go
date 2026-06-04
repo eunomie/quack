@@ -301,6 +301,23 @@ func TestHandle_Fluent_EmptyRaw(t *testing.T) {
 	}
 }
 
+func TestHandle_Fluent_EmptyRaw_Reply(t *testing.T) {
+	svc, _, _, r, _ := newTestService()
+	o := baseOrigin()
+	o.RepliedToID = "rm"
+	o.RepliedToAuthor = "bob"
+	o.RepliedToContent = "please fix the flaky cache test"
+	svc.Handle(context.Background(), Request{Content: "   ", Origin: o})
+	if !hasStr(r.reacts, "c|m|"+emojiWorking) {
+		t.Errorf("a bare ping in a reply should proceed (working reaction), got %v", r.reacts)
+	}
+	for _, p := range r.posts {
+		if strings.Contains(p.content, "nothing to do") {
+			t.Errorf("a bare ping in a reply should not say 'nothing to do', got %v", r.posts)
+		}
+	}
+}
+
 func TestGuidanceBlock(t *testing.T) {
 	if got := guidanceBlock("  "); got != "" {
 		t.Errorf("blank guidance should yield empty, got %q", got)
