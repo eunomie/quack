@@ -45,6 +45,46 @@ func TestMentionsBot_RoleMention(t *testing.T) {
 	}
 }
 
+func authMsg(userID, guildID, channelID string) *discordgo.MessageCreate {
+	return &discordgo.MessageCreate{Message: &discordgo.Message{
+		Author:    &discordgo.User{ID: userID},
+		GuildID:   guildID,
+		ChannelID: channelID,
+	}}
+}
+
+// An empty allowlist permits any message; a populated dimension restricts to
+// its members and combines with the others via AND.
+func TestAuthorized_MultiGuild(t *testing.T) {
+	open := &Bot{} // no allowlist => any
+	if !open.authorized(authMsg("u9", "g9", "c9")) {
+		t.Error("empty allowlist should authorize any message")
+	}
+
+	b := &Bot{allowed: Allow{
+		UserIDs:  []string{"u1", "u2"},
+		GuildIDs: []string{"g1", "g2"},
+	}}
+	if !b.authorized(authMsg("u2", "g2", "anychan")) {
+		t.Error("user and guild both in the allowlist should be authorized")
+	}
+	if b.authorized(authMsg("u2", "g3", "anychan")) {
+		t.Error("guild g3 not in allowlist should be rejected")
+	}
+	if b.authorized(authMsg("u3", "g1", "anychan")) {
+		t.Error("user u3 not in allowlist should be rejected")
+	}
+
+	// Channel restriction applies to top-level mentions but not thread feeds.
+	chanBound := &Bot{allowed: Allow{ChannelIDs: []string{"c1"}}}
+	if chanBound.authorized(authMsg("u", "g", "c2")) {
+		t.Error("channel c2 not in allowlist should be rejected")
+	}
+	if !chanBound.authorizedThread(authMsg("u", "g", "c2")) {
+		t.Error("thread auth ignores channel restriction")
+	}
+}
+
 // Mention alone on line 1, prompt on line 2 — the directive line is empty.
 // Regression: stripMention must not collapse the separating newline.
 func TestStripMention_EmptyDirectiveLine(t *testing.T) {

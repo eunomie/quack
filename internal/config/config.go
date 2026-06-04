@@ -29,12 +29,40 @@ type Config struct {
 }
 
 // Discord holds Discord-specific settings.
+//
+// The allowlist accepts either a single id (allowed_*_id) or a list
+// (allowed_*_ids); both are merged. An empty merged list means "any". Keeping
+// the singular fields working means an existing config can never silently widen
+// to allow everyone after an upgrade.
 type Discord struct {
-	Token                    string `toml:"token"`
-	AllowedUserID            string `toml:"allowed_user_id"`
-	AllowedGuildID           string `toml:"allowed_guild_id"`
-	AllowedChannelID         string `toml:"allowed_channel_id"`
-	ThreadAutoArchiveMinutes int    `toml:"thread_auto_archive_minutes"`
+	Token                    string   `toml:"token"`
+	AllowedUserID            string   `toml:"allowed_user_id"`
+	AllowedUserIDs           []string `toml:"allowed_user_ids"`
+	AllowedGuildID           string   `toml:"allowed_guild_id"`
+	AllowedGuildIDs          []string `toml:"allowed_guild_ids"`
+	AllowedChannelID         string   `toml:"allowed_channel_id"`
+	AllowedChannelIDs        []string `toml:"allowed_channel_ids"`
+	ThreadAutoArchiveMinutes int      `toml:"thread_auto_archive_minutes"`
+}
+
+// UserIDs, GuildIDs, and ChannelIDs return the merged allowlist for each
+// dimension (singular field + list). An empty result means "any".
+func (d Discord) UserIDs() []string    { return mergeIDs(d.AllowedUserID, d.AllowedUserIDs) }
+func (d Discord) GuildIDs() []string   { return mergeIDs(d.AllowedGuildID, d.AllowedGuildIDs) }
+func (d Discord) ChannelIDs() []string { return mergeIDs(d.AllowedChannelID, d.AllowedChannelIDs) }
+
+// mergeIDs combines a singular id with a list, dropping empties.
+func mergeIDs(single string, many []string) []string {
+	out := make([]string, 0, len(many)+1)
+	if single != "" {
+		out = append(out, single)
+	}
+	for _, id := range many {
+		if id != "" {
+			out = append(out, id)
+		}
+	}
+	return out
 }
 
 // Load reads config from path, applies the DISCORD_BOT_TOKEN env override,

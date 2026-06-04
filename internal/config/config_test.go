@@ -134,6 +134,60 @@ func TestLoad_InferGuidance(t *testing.T) {
 	}
 }
 
+func TestDiscordAllowlistMerge(t *testing.T) {
+	d := Discord{
+		AllowedUserID:    "u1",
+		AllowedUserIDs:   []string{"u2", "u3"},
+		AllowedGuildIDs:  []string{"g1", "g2"},
+		AllowedChannelID: "c1",
+	}
+	if got, want := d.UserIDs(), []string{"u1", "u2", "u3"}; !equalIDs(got, want) {
+		t.Errorf("UserIDs() = %v, want %v (singular merged with list)", got, want)
+	}
+	if got, want := d.GuildIDs(), []string{"g1", "g2"}; !equalIDs(got, want) {
+		t.Errorf("GuildIDs() = %v, want %v (list only)", got, want)
+	}
+	if got, want := d.ChannelIDs(), []string{"c1"}; !equalIDs(got, want) {
+		t.Errorf("ChannelIDs() = %v, want %v (singular only)", got, want)
+	}
+	// An unset dimension yields an empty list ("any").
+	if got := (Discord{}).GuildIDs(); len(got) != 0 {
+		t.Errorf("empty GuildIDs() = %v, want empty (any)", got)
+	}
+	// Empty strings inside a list are dropped.
+	if got := (Discord{AllowedGuildIDs: []string{"", "g1"}}).GuildIDs(); !equalIDs(got, []string{"g1"}) {
+		t.Errorf("GuildIDs() with blank entry = %v, want [g1]", got)
+	}
+}
+
+func equalIDs(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
+}
+
+func TestLoad_AllowedGuildIDs(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.toml")
+	body := "[discord]\nallowed_guild_ids = [\"g1\", \"g2\"]\n"
+	if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := cfg.Discord.GuildIDs(); !equalIDs(got, []string{"g1", "g2"}) {
+		t.Errorf("GuildIDs() = %v, want [g1 g2]", got)
+	}
+}
+
 func TestLoad_ScratchDirExplicit(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "config.toml")

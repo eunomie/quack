@@ -18,9 +18,15 @@ name_agent     = "claude"     # agent used to auto-name sessions (best summarize
 
 [discord]
 # token = "..." # prefer DISCORD_BOT_TOKEN env instead
-allowed_user_id  = "YOUR_DISCORD_USER_ID"
-allowed_guild_id = "YOUR_GUILD_ID"
-# allowed_channel_id = "OPTIONAL_CHANNEL_ID"
+# Each allowlist dimension restricts who/where the bot answers; an empty
+# (omitted) dimension means "any". Use the singular form for one id or the
+# plural list to permit several. Both forms are merged if you set both.
+# A message is authorized only if it passes every set dimension (user AND
+# guild AND channel).
+allowed_user_id   = "YOUR_DISCORD_USER_ID"
+# allowed_user_ids  = ["USER_ID_1", "USER_ID_2"]
+allowed_guild_ids = ["YOUR_GUILD_ID", "ANOTHER_GUILD_ID"]
+# allowed_channel_ids = ["OPTIONAL_CHANNEL_ID"]
 thread_auto_archive_minutes = 10080 # Discord allows only 60, 1440, 4320, or 10080 (7 days)
 
 [agents.claude]

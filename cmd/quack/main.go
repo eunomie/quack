@@ -73,9 +73,9 @@ func main() {
 
 	var svc *session.Service
 	bot, err := discord.New(cfg.Discord.Token, discord.Allow{
-		UserID:    cfg.Discord.AllowedUserID,
-		GuildID:   cfg.Discord.AllowedGuildID,
-		ChannelID: cfg.Discord.AllowedChannelID,
+		UserIDs:    cfg.Discord.UserIDs(),
+		GuildIDs:   cfg.Discord.GuildIDs(),
+		ChannelIDs: cfg.Discord.ChannelIDs(),
 	}, func(r session.Replier) *session.Service {
 		svc = session.New(scfg, g, tx, r)
 		svc.UseDrivers(drivers)

@@ -23,11 +23,12 @@ type Bot struct {
 	roleCache map[string]map[string]bool // guildID -> role IDs that address the bot
 }
 
-// Allow is the authorization allowlist.
+// Allow is the authorization allowlist. Each dimension is a set of permitted
+// ids; an empty list means "any" for that dimension.
 type Allow struct {
-	UserID    string
-	GuildID   string
-	ChannelID string // optional ("" = any channel in the guild)
+	UserIDs    []string
+	GuildIDs   []string
+	ChannelIDs []string // empty = any channel in the guild
 }
 
 // New builds a Bot. svcFor returns the orchestrator for a given Replier so the
@@ -126,26 +127,28 @@ func (b *Bot) onThreadUpdate(s *discordgo.Session, t *discordgo.ThreadUpdate) {
 }
 
 func (b *Bot) authorized(m *discordgo.MessageCreate) bool {
-	if b.allowed.UserID != "" && m.Author.ID != b.allowed.UserID {
-		return false
-	}
-	if b.allowed.GuildID != "" && m.GuildID != b.allowed.GuildID {
-		return false
-	}
-	if b.allowed.ChannelID != "" && m.ChannelID != b.allowed.ChannelID {
-		return false
-	}
-	return true
+	return allows(b.allowed.UserIDs, m.Author.ID) &&
+		allows(b.allowed.GuildIDs, m.GuildID) &&
+		allows(b.allowed.ChannelIDs, m.ChannelID)
 }
 
 func (b *Bot) authorizedThread(m *discordgo.MessageCreate) bool {
-	if b.allowed.UserID != "" && m.Author.ID != b.allowed.UserID {
-		return false
+	return allows(b.allowed.UserIDs, m.Author.ID) &&
+		allows(b.allowed.GuildIDs, m.GuildID)
+}
+
+// allows reports whether id passes an allowlist dimension: an empty list
+// permits any id, otherwise id must be a member.
+func allows(list []string, id string) bool {
+	if len(list) == 0 {
+		return true
 	}
-	if b.allowed.GuildID != "" && m.GuildID != b.allowed.GuildID {
-		return false
+	for _, x := range list {
+		if x == id {
+			return true
+		}
 	}
-	return true
+	return false
 }
 
 // mentionsBot reports whether m addresses the bot: a direct user mention of
