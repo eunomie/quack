@@ -227,9 +227,16 @@ func interpretationNote(dir *command.Directive) string {
 // On any infer failure it falls back to a scratch-dir run of the raw request.
 func (s *Service) handleFluent(ctx context.Context, req Request, raw string) {
 	if raw == "" {
-		_ = s.reply.React(ctx, req.Origin.ChannelID, req.Origin.MessageID, emojiError)
-		_, _ = s.reply.Post(ctx, req.Origin.ChannelID, "🦆 nothing to do — mention me with a request")
-		return
+		// A bare ping in a reply isn't "nothing to do": the replied-to message is
+		// the request. Synthesize an instruction so the infer path deduces the task
+		// from it (its content is surfaced in the history and the infer context).
+		if strings.TrimSpace(req.Origin.RepliedToContent) != "" {
+			raw = "Act on the message I replied to — deduce the task from its content."
+		} else {
+			_ = s.reply.React(ctx, req.Origin.ChannelID, req.Origin.MessageID, emojiError)
+			_, _ = s.reply.Post(ctx, req.Origin.ChannelID, "🦆 nothing to do — mention me with a request")
+			return
+		}
 	}
 	// Instant feedback while the infer one-shot runs (it's on the critical path
 	// before the thread opens).
