@@ -77,7 +77,13 @@ Interfaces (defined consumer-side in `internal/session/service.go`) and their ad
    (`PromoteThread`); a screenshot-only thread reply (empty text) still feeds. A
    🛑 (or custom `:stop:`) **reaction** on any session message routes to
    `onReaction` → `StopByMessage` (matches by thread id, or by recorded root
-   channel+message), an interrupt that needs no typed command.
+   channel+message), an interrupt that needs no typed command. A fresh mention
+   **already inside a thread** (the common case: a Discord forum post) is detected
+   via the channel type and runs **in place** — quack drives that thread instead of
+   opening a new one, titles it with the post's own name plus the status emoji,
+   authorizes the channel allowlist against the thread's **parent**, and leaves the
+   post open on `/stop` (it's the user's). `Request.InThread` / `Request.ThreadName`
+   carry this; see `hack/designs/2026-06-04-forum-in-place-sessions.md`.
 2. `Service.Handle` (`service.go`) — the spine: route the message (fluent infer by
    default, or the explicit `!` grammar) into a directive → resolve agent → open a
    Discord thread + post an ack → (if no explicit `name=`) ask the agent to suggest
