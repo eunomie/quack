@@ -112,7 +112,7 @@ func (b *Bot) onMessage(s *discordgo.Session, m *discordgo.MessageCreate) {
 	if ref := referencedMessage(s, m); ref != nil && ref.Author != nil {
 		origin.RepliedToID = ref.ID
 		origin.RepliedToAuthor = ref.Author.Username
-		origin.RepliedToContent = ref.Content
+		origin.RepliedToContent = flattenMessage(ref)
 	}
 
 	req := session.Request{

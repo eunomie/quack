@@ -88,7 +88,7 @@ func (r *replier) RecentMessages(ctx context.Context, channelID, beforeID string
 		if m.Author == nil {
 			continue
 		}
-		out = append(out, session.Message{Author: m.Author.Username, Content: m.Content})
+		out = append(out, session.Message{Author: m.Author.Username, Content: flattenMessage(m)})
 	}
 	return out, nil
 }
