@@ -62,7 +62,8 @@ runs the agent non-interactively, posting the answer in segments as it's
 produced (tool steps inline), and you reply in-thread to send another turn. Status shows as a reaction on your
 message (👀 working → ✅ answered · ❌ error). Post **`/attach`** to promote the
 session to a local tmux session you can jump into — same conversation, with
-terminal + files; post `/stop` or archive the thread to end it. With
+terminal + files; post `/stop`, react 🛑 (or a custom `:stop:`) on any of the
+session's messages, or archive the thread to end it. With
 **`no-headless`** it starts an interactive tmux session from the start, with no
 Discord back-channel:
 

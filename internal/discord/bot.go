@@ -38,12 +38,13 @@ func New(token string, allowed Allow, svcFor func(session.Replier) *session.Serv
 	if err != nil {
 		return nil, err
 	}
-	s.Identify.Intents = discordgo.IntentsGuilds | discordgo.IntentsGuildMessages | discordgo.IntentMessageContent
+	s.Identify.Intents = discordgo.IntentsGuilds | discordgo.IntentsGuildMessages | discordgo.IntentMessageContent | discordgo.IntentsGuildMessageReactions
 
 	b := &Bot{s: s, allowed: allowed}
 	b.svc = svcFor(&replier{s: s})
 	s.AddHandler(b.onMessage)
 	s.AddHandler(b.onThreadUpdate)
+	s.AddHandler(b.onReaction)
 	return b, nil
 }
 
@@ -147,6 +148,40 @@ func referencedMessage(s *discordgo.Session, m *discordgo.MessageCreate) *discor
 	return msg
 }
 
+// stopEmoji is the unicode reaction that halts a running session. It is also
+// quack's own "stopped" status marker (emojiStopped), so the glyph the bot
+// stamps when a session ends is the same one a user stamps to end it.
+const stopEmoji = "🛑"
+
+// onReaction halts a running session when an authorized user stamps a stop
+// reaction on one of its messages — a faster, more visceral interrupt than
+// typing /stop, for when the agent starts doing something it shouldn't. The
+// bot's own status reactions are ignored so its 🛑 stopped-marker can't loop.
+func (b *Bot) onReaction(s *discordgo.Session, r *discordgo.MessageReactionAdd) {
+	if s.State == nil || s.State.User == nil || r.UserID == s.State.User.ID {
+		return
+	}
+	if !isStopReaction(r.Emoji) {
+		return
+	}
+	if !b.authorizedReaction(r.GuildID, r.UserID) {
+		return
+	}
+	b.svc.StopByMessage(context.Background(), r.ChannelID, r.MessageID)
+}
+
+// isStopReaction reports whether a reaction should halt a session: the unicode
+// 🛑, or any custom guild emoji named "stop" (e.g. a server's own <:stop:>).
+// Discord delivers a unicode emoji with an empty ID and the glyph as its name,
+// and a custom emoji with a snowflake ID and its short name — so matching the
+// name covers a custom :stop: in any guild without per-guild configuration.
+func isStopReaction(e discordgo.Emoji) bool {
+	if e.ID != "" {
+		return strings.EqualFold(e.Name, "stop")
+	}
+	return e.Name == stopEmoji
+}
+
 func (b *Bot) onThreadUpdate(s *discordgo.Session, t *discordgo.ThreadUpdate) {
 	if t.Channel == nil || t.ThreadMetadata == nil || !t.ThreadMetadata.Archived {
 		return
@@ -165,6 +200,15 @@ func (b *Bot) authorized(m *discordgo.MessageCreate) bool {
 func (b *Bot) authorizedThread(m *discordgo.MessageCreate) bool {
 	return allows(b.allowed.UserIDs, m.Author.ID) &&
 		allows(b.allowed.GuildIDs, m.GuildID)
+}
+
+// authorizedReaction gates a stop reaction. Like authorizedThread it ignores
+// the channel restriction: a reaction lands inside a thread (or on a root
+// message whose session was already authorized at creation), so user+guild are
+// the meaningful dimensions.
+func (b *Bot) authorizedReaction(guildID, userID string) bool {
+	return allows(b.allowed.UserIDs, userID) &&
+		allows(b.allowed.GuildIDs, guildID)
 }
 
 // allows reports whether id passes an allowlist dimension: an empty list

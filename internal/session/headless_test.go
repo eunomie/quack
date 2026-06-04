@@ -130,6 +130,53 @@ func TestHeadless_StopEndsSession(t *testing.T) {
 	}
 }
 
+// A stop reaction inside the thread (channel == thread id) ends the session.
+func TestHeadless_StopByMessageInThread(t *testing.T) {
+	d := &fakeDriver{turns: []scripted{{texts: []string{"ok"}, ref: "s"}}}
+	svc, _ := newHeadlessService(d)
+	svc.startHeadless(context.Background(), "claude", "thread-2", "/wt", "", "sess-2", "", turnReq{channelID: "c", messageID: "m2", text: "go"})
+	svc.waitIdle("thread-2")
+	if !svc.StopByMessage(context.Background(), "thread-2", "any-thread-msg") {
+		t.Fatalf("reaction in the thread should stop the session")
+	}
+	if svc.Tracked("thread-2") {
+		t.Fatalf("session still tracked after stop")
+	}
+}
+
+// A stop reaction on the original triggering message in the parent channel
+// (matched by recorded root channel+message) ends the session too.
+func TestHeadless_StopByMessageOnRoot(t *testing.T) {
+	d := &fakeDriver{turns: []scripted{{texts: []string{"ok"}, ref: "s"}}}
+	svc, _ := newHeadlessService(d)
+	svc.startHeadless(context.Background(), "claude", "thread-2", "/wt", "", "sess-2", "", turnReq{channelID: "c", messageID: "m2", text: "go"})
+	svc.waitIdle("thread-2")
+	// Wrong message id in the right channel must not match.
+	if svc.StopByMessage(context.Background(), "c", "other") {
+		t.Fatalf("a different message in the root channel should not match")
+	}
+	if !svc.StopByMessage(context.Background(), "c", "m2") {
+		t.Fatalf("reaction on the root trigger message should stop the session")
+	}
+	if svc.Tracked("thread-2") {
+		t.Fatalf("session still tracked after stop")
+	}
+}
+
+// A stop reaction on an unrelated message stops nothing.
+func TestHeadless_StopByMessageNoMatch(t *testing.T) {
+	d := &fakeDriver{turns: []scripted{{texts: []string{"ok"}, ref: "s"}}}
+	svc, _ := newHeadlessService(d)
+	svc.startHeadless(context.Background(), "claude", "thread-2", "/wt", "", "sess-2", "", turnReq{channelID: "c", messageID: "m2", text: "go"})
+	svc.waitIdle("thread-2")
+	if svc.StopByMessage(context.Background(), "elsewhere", "nope") {
+		t.Fatalf("unrelated reaction should not stop any session")
+	}
+	if !svc.Tracked("thread-2") {
+		t.Fatalf("session should still be tracked")
+	}
+}
+
 func TestHeadless_StopMarksRootMessageStopped(t *testing.T) {
 	d := &fakeDriver{turns: []scripted{{texts: []string{"ok"}, ref: "s"}}}
 	svc, r := newHeadlessService(d)

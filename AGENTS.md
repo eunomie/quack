@@ -74,7 +74,10 @@ Interfaces (defined consumer-side in `internal/session/service.go`) and their ad
    channel) → build `session.Request` (carrying any `m.Attachments`) → dispatch
    `Service.Handle` in its own goroutine. A message **in a tracked thread** is
    routed instead to `FeedThread` / `/stop` (`StopThread`) / `/attach`
-   (`PromoteThread`); a screenshot-only thread reply (empty text) still feeds.
+   (`PromoteThread`); a screenshot-only thread reply (empty text) still feeds. A
+   🛑 (or custom `:stop:`) **reaction** on any session message routes to
+   `onReaction` → `StopByMessage` (matches by thread id, or by recorded root
+   channel+message), an interrupt that needs no typed command.
 2. `Service.Handle` (`service.go`) — the spine: route the message (fluent infer by
    default, or the explicit `!` grammar) into a directive → resolve agent → open a
    Discord thread + post an ack → (if no explicit `name=`) ask the agent to suggest
@@ -138,7 +141,8 @@ clone-on-miss / `git fetch --all --prune` then add a worktree. Key points:
   the previous turn via its `SessionRef`. Assistant text and tool activity stream
   back as Discord posts; status shows as a reaction on the user's message
   (👀→✅/❌). `/attach` promotes the session to a resumable `tmux` session;
-  `/stop` ends it and archives the thread, and archiving the thread ends it. The
+  `/stop` (or a 🛑/`:stop:` reaction on a session message) ends it and archives
+  the thread, and archiving the thread ends it. The
   session's resume state is persisted so it survives a quack restart (see
   *Restart resilience*).
 - **Interactive (`no-headless`):** a single detached `tmux new-session` runs the

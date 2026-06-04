@@ -118,6 +118,35 @@ func (s *Service) StopThread(ctx context.Context, threadID string) bool {
 	return true
 }
 
+// StopByMessage stops the session a reaction landed on, identified by the
+// reacted message. A reaction inside the thread matches by channel (the thread
+// id is the session key); a reaction on the original triggering message in the
+// parent channel matches by its recorded root channel+message. Returns false if
+// no session matches. Lets a stop reaction halt a run from either surface — the
+// thread where the agent streams, or the channel view where the root message
+// carries the status emoji.
+func (s *Service) StopByMessage(ctx context.Context, channelID, messageID string) bool {
+	s.hmu.Lock()
+	threadID := ""
+	if _, ok := s.sessions[channelID]; ok {
+		threadID = channelID
+	} else {
+		for id, ls := range s.sessions {
+			// rootChannelID/rootMessageID are set once at session creation and
+			// never mutated, so reading them under hmu is safe.
+			if ls.rootChannelID == channelID && ls.rootMessageID == messageID {
+				threadID = id
+				break
+			}
+		}
+	}
+	s.hmu.Unlock()
+	if threadID == "" {
+		return false
+	}
+	return s.StopThread(ctx, threadID)
+}
+
 // PromoteThread converts a headless session into an attachable tmux session,
 // resuming the same agent session so the conversation continues. Returns false
 // if the thread isn't a tracked headless session.
