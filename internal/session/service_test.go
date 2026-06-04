@@ -489,10 +489,12 @@ func TestHandle_AgentNamesSession(t *testing.T) {
 	if len(g.worktrees) != 1 || !strings.Contains(g.worktrees[0], "revue-worktrees/readme-suggestions|readme-suggestions|origin/main") {
 		t.Fatalf("worktrees = %v", g.worktrees)
 	}
-	// Thread renamed from the provisional name to "<owner/repo> <agent-name>"; the
-	// headless status updater then prefixes the status icon onto that title.
-	if len(r.renames) == 0 || !strings.HasSuffix(r.renames[0], "|eunomie/revue readme-suggestions") {
-		t.Fatalf("expected first rename to the labelled agent name, got %v", r.renames)
+	// Headless sessions don't rename to the bare labelled name first; the status
+	// updater owns the title, so the very first rename already carries the working
+	// icon ("👀 <owner/repo> <agent-name>") — one rename at startup, not two, to
+	// stay under Discord's thread-rename rate limit.
+	if len(r.renames) == 0 || !strings.HasSuffix(r.renames[0], "|"+emojiWorking+" eunomie/revue readme-suggestions") {
+		t.Fatalf("expected first rename to carry the working icon and labelled name, got %v", r.renames)
 	}
 	if last := r.renames[len(r.renames)-1]; !strings.HasSuffix(last, "|"+emojiDone+" eunomie/revue readme-suggestions") {
 		t.Fatalf("expected final title to carry the done icon and label, got %v", r.renames)

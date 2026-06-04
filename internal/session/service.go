@@ -253,7 +253,13 @@ func (s *Service) run(ctx context.Context, req Request, dir *command.Directive, 
 	// Title the thread "<owner/repo|dir> <name>" so multiple threads are easy to
 	// place at a glance. The provisional thread name has no label, so a labelled
 	// workspace always renames; an unlabelled one only renames if the name changed.
-	if desired := threadTitle("", prep.label, prep.name); desired != provisional && threadID != req.Origin.ChannelID {
+	//
+	// Headless sessions skip this rename: their titleUpdater renames to
+	// "👀 <label> <name>" the moment the first turn starts working, so renaming
+	// here too would edit the thread name twice in quick succession and hit
+	// Discord's heavy thread-rename rate limit (~2 per 10 minutes). Letting the
+	// titleUpdater own the title collapses startup to a single rename.
+	if desired := threadTitle("", prep.label, prep.name); !dir.Headless && desired != provisional && threadID != req.Origin.ChannelID {
 		_ = s.reply.RenameThread(ctx, threadID, desired)
 	}
 
