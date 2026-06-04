@@ -114,6 +114,13 @@ type Request struct {
 	Content     string       // mention-stripped
 	Attachments []Attachment // files dropped on the command (e.g. screenshots)
 	Origin      Origin       // guild/channel/message/author/createdAt set; thread/reply empty
+
+	// InThread is set when the mention arrived inside an existing thread (commonly
+	// a forum post). The session then runs in place in that thread — Origin.ChannelID
+	// is the thread id — instead of opening a new one. ThreadName is the thread's
+	// current title, used verbatim as the Discord-facing session title.
+	InThread   bool
+	ThreadName string
 }
 
 // Service orchestrates a session launch.
@@ -207,9 +214,14 @@ func (s *Service) run(ctx context.Context, req Request, dir *command.Directive, 
 	}
 	effort := ag.EffortOr(dir.Effort)
 
-	threadID, err := s.reply.OpenThread(ctx, req.Origin.ChannelID, req.Origin.MessageID, provisional, s.cfg.ThreadAutoArchiveMin)
-	if err != nil {
-		threadID = req.Origin.ChannelID
+	// A mention already inside a thread (a forum post) runs in place: drive that
+	// thread directly. Discord can't nest threads anyway, so OpenThread would only
+	// fail here. Otherwise open a fresh thread off the triggering message.
+	threadID := req.Origin.ChannelID
+	if !req.InThread {
+		if id, err := s.reply.OpenThread(ctx, req.Origin.ChannelID, req.Origin.MessageID, provisional, s.cfg.ThreadAutoArchiveMin); err == nil {
+			threadID = id
+		}
 	}
 	req.Origin.ThreadID = threadID
 

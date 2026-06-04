@@ -616,3 +616,34 @@ func TestHandle_HeadlessIsDefault(t *testing.T) {
 		t.Errorf("expected working+done reactions on the command message, got %v", r.reacts)
 	}
 }
+
+// A mention already inside a thread (a forum post) runs in place: quack drives
+// that thread (Origin.ChannelID) and never opens a new one.
+func TestHandle_InThread_RunsInPlace(t *testing.T) {
+	svc, _, tx, r, _ := newTestService()
+
+	svc.Handle(context.Background(), Request{
+		Content:    "! no-headless\nhi",
+		InThread:   true,
+		ThreadName: "Help with login",
+		Origin:     Origin{GuildID: "g", ChannelID: "post1", MessageID: "m", AuthorID: "u", Author: "alice", CreatedAt: "2026-06-04T17:00:00Z"},
+	})
+
+	if len(r.threads) != 0 {
+		t.Fatalf("OpenThread must be skipped in place; threads = %v", r.threads)
+	}
+	if len(tx.created) != 1 {
+		t.Fatalf("expected one tmux session, got %d", len(tx.created))
+	}
+	// Ack/progress posts go into the post itself, not a new thread.
+	for _, p := range r.posts {
+		if p.channel != "post1" {
+			t.Errorf("post to %q, want the in-place thread post1: %+v", p.channel, p)
+		}
+	}
+	// The start-rename is skipped in place (threadID == channelID), so the user's
+	// post title is left untouched on the interactive path.
+	if len(r.renames) != 0 {
+		t.Errorf("no rename expected in place on the no-headless path; renames = %v", r.renames)
+	}
+}
