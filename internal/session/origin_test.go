@@ -29,6 +29,25 @@ func TestPromptHeader(t *testing.T) {
 	}
 }
 
+func TestPromptHeaderRepliedTo(t *testing.T) {
+	o := sampleOrigin()
+	o.RepliedToID = "m0"
+	o.RepliedToAuthor = "bob"
+	o.RepliedToContent = "the original feedback text"
+	h := o.PromptHeader()
+	for _, want := range []string{"<quack-replied-to>", "message_id: m0", "from bob", "the original feedback text", "</quack-replied-to>"} {
+		if !strings.Contains(h, want) {
+			t.Errorf("header missing %q\n%s", want, h)
+		}
+	}
+}
+
+func TestPromptHeaderNoReply(t *testing.T) {
+	if strings.Contains(sampleOrigin().PromptHeader(), "quack-replied-to") {
+		t.Error("replied-to block should be absent when no referenced message")
+	}
+}
+
 func TestEnvVars(t *testing.T) {
 	env := sampleOrigin().EnvVars("fix-cache", "/state/sessions/fix-cache/context.json")
 	want := map[string]string{

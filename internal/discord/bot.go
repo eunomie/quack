@@ -102,19 +102,49 @@ func (b *Bot) onMessage(s *discordgo.Session, m *discordgo.MessageCreate) {
 	content := stripMention(m.Content, botID, botRoles)
 	created := m.Timestamp.Format("2006-01-02T15:04:05Z07:00")
 
+	origin := session.Origin{
+		GuildID:   m.GuildID,
+		ChannelID: m.ChannelID,
+		MessageID: m.ID,
+		AuthorID:  m.Author.ID,
+		Author:    m.Author.Username,
+		CreatedAt: created,
+	}
+	if ref := referencedMessage(s, m); ref != nil && ref.Author != nil {
+		origin.RepliedToID = ref.ID
+		origin.RepliedToAuthor = ref.Author.Username
+		origin.RepliedToContent = flattenMessage(ref)
+	}
+
 	req := session.Request{
 		Content:     content,
 		Attachments: toAttachments(m.Attachments),
-		Origin: session.Origin{
-			GuildID:   m.GuildID,
-			ChannelID: m.ChannelID,
-			MessageID: m.ID,
-			AuthorID:  m.Author.ID,
-			Author:    m.Author.Username,
-			CreatedAt: created,
-		},
+		Origin:      origin,
 	}
 	go b.svc.Handle(context.Background(), req)
+}
+
+// referencedMessage resolves the message a triggering message replies to. The
+// gateway usually inlines it as ReferencedMessage; when it only carries the
+// MessageReference (e.g. the referenced message wasn't cached), fall back to a
+// REST fetch. Returns nil when the message isn't a reply or can't be resolved.
+func referencedMessage(s *discordgo.Session, m *discordgo.MessageCreate) *discordgo.Message {
+	if m.ReferencedMessage != nil {
+		return m.ReferencedMessage
+	}
+	ref := m.MessageReference
+	if ref == nil || ref.MessageID == "" {
+		return nil
+	}
+	chID := ref.ChannelID
+	if chID == "" {
+		chID = m.ChannelID
+	}
+	msg, err := s.ChannelMessage(chID, ref.MessageID)
+	if err != nil {
+		return nil
+	}
+	return msg
 }
 
 func (b *Bot) onThreadUpdate(s *discordgo.Session, t *discordgo.ThreadUpdate) {
