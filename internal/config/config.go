@@ -21,6 +21,7 @@ type Config struct {
 	NameAgent         string                 `toml:"name_agent"`
 	InferAgent        string                 `toml:"infer_agent"`         // agent for the fluent `! ` infer step (default: name_agent)
 	InferEffort       string                 `toml:"infer_effort"`        // effort for the infer one-shot (default: medium)
+	InferGuidance     string                 `toml:"infer_guidance"`      // standing hints folded into the infer prompt (empty => off)
 	InferHistoryLimit int                    `toml:"infer_history_limit"` // recent messages fed to the infer agent (default: 20)
 	StateDir          string                 `toml:"state_dir"`
 	Discord           Discord                `toml:"discord"`

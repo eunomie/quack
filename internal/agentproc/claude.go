@@ -13,6 +13,7 @@ import (
 // Claude drives the claude CLI in headless resume-per-turn mode.
 type Claude struct {
 	Command        string
+	Model          string // --model flag value; empty means use the CLI default. Codex has no equivalent field.
 	EffortTemplate string
 	NameTemplate   string
 	PermissionMode string
@@ -31,6 +32,9 @@ func (d Claude) args(t Turn) []string {
 	}
 	if d.Settings != "" {
 		a = append(a, "--settings", d.Settings)
+	}
+	if d.Model != "" {
+		a = append(a, "--model", d.Model)
 	}
 	if t.SessionRef != "" {
 		a = append(a, "--resume", t.SessionRef)
@@ -69,6 +73,18 @@ func (d Claude) RunTurn(ctx context.Context, t Turn, emit func(Event)) TurnDone 
 	return done
 }
 
+// oneShotArgs builds the argv for a single read-only (plan-mode) turn.
+func (d Claude) oneShotArgs(prompt, effort string) []string {
+	args := []string{"-p", prompt, "--output-format", "json", "--permission-mode", "plan"}
+	if d.Model != "" {
+		args = append(args, "--model", d.Model)
+	}
+	if effort != "" && d.EffortTemplate != "" {
+		args = append(args, strings.Fields(strings.ReplaceAll(d.EffortTemplate, "{effort}", effort))...)
+	}
+	return args
+}
+
 // OneShot runs a single read-only turn (plan mode, no edits) and returns the
 // agent's final text.
 func (d Claude) OneShot(ctx context.Context, prompt, effort string) (string, error) {
@@ -76,11 +92,7 @@ func (d Claude) OneShot(ctx context.Context, prompt, effort string) (string, err
 	if command == "" {
 		command = "claude"
 	}
-	args := []string{"-p", prompt, "--output-format", "json", "--permission-mode", "plan"}
-	if effort != "" && d.EffortTemplate != "" {
-		args = append(args, strings.Fields(strings.ReplaceAll(d.EffortTemplate, "{effort}", effort))...)
-	}
-	out, err := exec.CommandContext(ctx, command, args...).Output()
+	out, err := exec.CommandContext(ctx, command, d.oneShotArgs(prompt, effort)...).Output()
 	if err != nil {
 		return "", err
 	}

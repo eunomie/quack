@@ -98,6 +98,42 @@ func TestLoad_InferAgentExplicitOverride(t *testing.T) {
 	}
 }
 
+func TestLoad_AgentModel(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.toml")
+	body := "[agents.infer]\ncommand = \"claude\"\nmodel = \"claude-haiku-4-5-20251001\"\n"
+	if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	a, ok := cfg.Agents["infer"]
+	if !ok {
+		t.Fatalf("agents[\"infer\"] not found")
+	}
+	if a.Model != "claude-haiku-4-5-20251001" {
+		t.Errorf("infer agent model = %q, want %q", a.Model, "claude-haiku-4-5-20251001")
+	}
+}
+
+func TestLoad_InferGuidance(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.toml")
+	body := "infer_guidance = \"bare dagger means dagger/dagger\"\n"
+	if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.InferGuidance != "bare dagger means dagger/dagger" {
+		t.Errorf("InferGuidance = %q", cfg.InferGuidance)
+	}
+}
+
 func TestLoad_ScratchDirExplicit(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "config.toml")

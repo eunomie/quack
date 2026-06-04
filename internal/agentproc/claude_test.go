@@ -74,6 +74,32 @@ func TestClaudeArgs_Settings(t *testing.T) {
 	}
 }
 
+func TestClaudeArgs_Model(t *testing.T) {
+	d := Claude{Command: "claude", Model: "claude-haiku-4-5-20251001"}
+
+	// --model applies on the first turn...
+	first := d.args(Turn{Prompt: "hi"})
+	if !contains(first, "--model") || !contains(first, "claude-haiku-4-5-20251001") {
+		t.Errorf("first turn missing --model: %v", first)
+	}
+	// ...and on resume turns too (each turn is a fresh claude process).
+	next := d.args(Turn{Prompt: "again", SessionRef: "sess-1"})
+	if !contains(next, "--model") {
+		t.Errorf("resume turn missing --model: %v", next)
+	}
+	// ...and in the one-shot path.
+	shot := d.oneShotArgs("p", "low")
+	if !contains(shot, "--model") || !contains(shot, "claude-haiku-4-5-20251001") {
+		t.Errorf("oneShotArgs missing --model: %v", shot)
+	}
+
+	// Unset Model => no --model flag.
+	none := Claude{Command: "claude"}.args(Turn{Prompt: "hi"})
+	if contains(none, "--model") {
+		t.Errorf("no Model should add no --model flag: %v", none)
+	}
+}
+
 func contains(ss []string, s string) bool {
 	for _, x := range ss {
 		if x == s {

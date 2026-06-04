@@ -39,6 +39,7 @@ func main() {
 		NameAgent:            cfg.NameAgent,
 		InferAgent:           cfg.InferAgent,
 		InferEffort:          cfg.InferEffort,
+		InferGuidance:        cfg.InferGuidance,
 		InferHistoryLimit:    cfg.InferHistoryLimit,
 		StateDir:             cfg.StateDir,
 		ThreadAutoArchiveMin: cfg.Discord.ThreadAutoArchiveMinutes,
@@ -52,10 +53,11 @@ func main() {
 		if !a.Headless {
 			continue
 		}
-		switch name {
+		switch a.Command {
 		case "claude":
 			drivers[name] = agentproc.Claude{
 				Command:        a.Command,
+				Model:          a.Model,
 				EffortTemplate: a.EffortTemplate,
 				NameTemplate:   a.NameTemplate,
 				PermissionMode: a.Mode(),
@@ -65,7 +67,7 @@ func main() {
 		case "codex":
 			drivers[name] = agentproc.Codex{Command: a.Command, EffortTemplate: a.EffortTemplate}
 		default:
-			log.Printf("agent %q has headless=true but no driver; ignoring", name)
+			log.Printf("agent %q has headless=true but command %q has no driver; ignoring", name, a.Command)
 		}
 	}
 

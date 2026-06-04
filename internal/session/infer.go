@@ -67,6 +67,19 @@ func parseInferred(out string) (inferred, error) {
 	return inf, nil
 }
 
+// guidanceBlock wraps standing infer hints in a fixed framing, or "" when s is
+// empty or all-whitespace. The framing constrains the hints to target/name
+// resolution so a prior can't make the agent invent a target for a request that
+// names no repo. The trailing blank line separates it from the conversation
+// section that follows in the prompt template.
+func guidanceBlock(s string) string {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return ""
+	}
+	return "Environment hints (use ONLY to resolve the target repo/path and the name; never invent a target when the request names no repo/dir):\n" + s + "\n\n"
+}
+
 // contextBlock wraps the infer agent's resolved context, or "" when s is empty or all-whitespace.
 func contextBlock(s string) string {
 	s = strings.TrimSpace(s)
@@ -90,7 +103,7 @@ Schema (all fields required):
 - headless: true (default) for a Discord conversation; false only if the user explicitly asks for an interactive or tmux session.
 - context: if the request refers to something discussed earlier (e.g. "this feature", "that bug"), resolve it into one short paragraph using the conversation below; otherwise "".
 
-Recent Discord conversation (oldest first), for resolving references and naming:
+%sRecent Discord conversation (oldest first), for resolving references and naming:
 <conversation>
 %s
 </conversation>
@@ -157,7 +170,7 @@ func (s *Service) inferDirective(ctx context.Context, raw, history string) (*com
 	if convo == "" {
 		convo = "(no recent messages)"
 	}
-	out, err := d.OneShot(ictx, fmt.Sprintf(inferPromptTemplate, convo, raw), s.inferEffort())
+	out, err := d.OneShot(ictx, fmt.Sprintf(inferPromptTemplate, guidanceBlock(s.cfg.InferGuidance), convo, raw), s.inferEffort())
 	if err != nil {
 		return nil, false
 	}

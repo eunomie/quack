@@ -102,6 +102,7 @@ type Config struct {
 	NameAgent            string // agent used to name sessions (default claude)
 	InferAgent           string // agent for the fluent `! ` infer step
 	InferEffort          string // effort for the infer one-shot
+	InferGuidance        string // standing hints folded into the infer prompt
 	InferHistoryLimit    int    // recent Discord messages fed to the infer agent
 	StateDir             string
 	ThreadAutoArchiveMin int

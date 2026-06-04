@@ -213,6 +213,15 @@ The Discord token is read from `DISCORD_BOT_TOKEN` (preferred) over `[discord].t
 the inline note on why the OS sandbox is left off (it breaks `git commit` in
 worktrees whose shared `.git` lives outside the workspace).
 
+Two optional levers tune the fluent infer step without touching the working
+agent: `infer_guidance` (a free-text string folded into the infer prompt as
+resolution hints — repo shorthands, where clones live; it never rewrites the
+request and is bounded by the same JSON validation) and a per-agent `model`
+field (claude-only; codex ignores it). Point `infer_agent` at a dedicated
+`[agents.infer]` entry with `model = …` and `headless = true` to run the infer
+one-shot (and naming) on a faster model — drivers are now selected by the
+agent's `command`, so the entry's name is a free-form label.
+
 ## Conventions
 
 - Keep the dependency-inversion seam intact: `session` should depend on its own

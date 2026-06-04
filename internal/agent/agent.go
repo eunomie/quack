@@ -6,6 +6,7 @@ import "strings"
 // Agent describes how to launch one coding agent.
 type Agent struct {
 	Command        string `toml:"command"`         // executable, e.g. "claude"
+	Model          string `toml:"model"`           // claude: --model value; unset => CLI default (codex ignores it)
 	EffortTemplate string `toml:"effort_template"` // contains "{effort}", e.g. "--effort {effort}"
 	NameTemplate   string `toml:"name_template"`   // contains "{name}", e.g. "-n {name}"
 	ResumeTemplate string `toml:"resume_template"` // contains "{session}", e.g. "--resume {session}"

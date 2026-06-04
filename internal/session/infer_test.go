@@ -301,6 +301,58 @@ func TestHandle_Fluent_EmptyRaw(t *testing.T) {
 	}
 }
 
+func TestGuidanceBlock(t *testing.T) {
+	if got := guidanceBlock("  "); got != "" {
+		t.Errorf("blank guidance should yield empty, got %q", got)
+	}
+	got := guidanceBlock("bare dagger means dagger/dagger")
+	if !strings.Contains(got, "Environment hints") || !strings.Contains(got, "never invent a target") {
+		t.Errorf("guidance block missing the fixed framing, got %q", got)
+	}
+	if !strings.Contains(got, "bare dagger means dagger/dagger") {
+		t.Errorf("guidance block should carry the user text, got %q", got)
+	}
+	// The trailing blank line is load-bearing: it separates the hints from the
+	// conversation section that follows the %s slot in the template.
+	if !strings.HasSuffix(got, "\n\n") {
+		t.Errorf("guidance block should end with a blank line for spacing, got %q", got)
+	}
+	// Surrounding whitespace on the input is trimmed before embedding.
+	if trimmed := guidanceBlock("  hint  "); strings.Contains(trimmed, "  hint  ") {
+		t.Errorf("guidance block should trim surrounding whitespace, got %q", trimmed)
+	}
+}
+
+func TestInferDirective_Guidance(t *testing.T) {
+	svc, _, _, _, _ := newTestService()
+	svc.cfg.InferGuidance = "bare dagger means dagger/dagger"
+	d := &fakeDriver{oneShot: `{"target":"dagger/dagger","name":"x"}`}
+	svc.drivers = map[string]agentproc.Driver{"claude": d}
+
+	if _, ok := svc.inferDirective(context.Background(), "build it", ""); !ok {
+		t.Fatal("expected ok")
+	}
+	if len(d.oneShotSeen) != 1 || !strings.Contains(d.oneShotSeen[0], "Environment hints") {
+		t.Errorf("guidance should be injected into the infer prompt, got %v", d.oneShotSeen)
+	}
+	if !strings.Contains(d.oneShotSeen[0], "bare dagger means dagger/dagger") {
+		t.Errorf("guidance text missing from prompt, got %q", d.oneShotSeen[0])
+	}
+}
+
+func TestInferDirective_NoGuidanceWhenUnset(t *testing.T) {
+	svc, _, _, _, _ := newTestService()
+	d := &fakeDriver{oneShot: `{"target":"a/b","name":"x"}`}
+	svc.drivers = map[string]agentproc.Driver{"claude": d}
+
+	if _, ok := svc.inferDirective(context.Background(), "build it", ""); !ok {
+		t.Fatal("expected ok")
+	}
+	if strings.Contains(d.oneShotSeen[0], "Environment hints") {
+		t.Errorf("no guidance configured should omit the hints section, got %q", d.oneShotSeen[0])
+	}
+}
+
 func TestHandle_Fluent_Headless(t *testing.T) {
 	svc, g, _, r, _ := newTestService()
 	g.existing["/src/github.com/dagger/dagger"] = true
