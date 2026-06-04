@@ -142,6 +142,49 @@ func TestStripMention_EmptyDirectiveLine(t *testing.T) {
 	}
 }
 
+// threadContext recognizes a thread (forum post or regular thread) by its channel
+// type and surfaces the post name + parent id; a normal text channel is not in place.
+func TestThreadContext(t *testing.T) {
+	forumPost := &discordgo.Channel{
+		Type:     discordgo.ChannelTypeGuildPublicThread,
+		Name:     "Help with login",
+		ParentID: "forum1",
+	}
+	in, name, parent := threadContext(forumPost)
+	if !in || name != "Help with login" || parent != "forum1" {
+		t.Errorf("threadContext(forum post) = %v,%q,%q; want true,\"Help with login\",\"forum1\"", in, name, parent)
+	}
+
+	textChan := &discordgo.Channel{Type: discordgo.ChannelTypeGuildText, Name: "general"}
+	if in, _, _ := threadContext(textChan); in {
+		t.Error("a normal text channel is not an in-place thread")
+	}
+
+	if in, _, _ := threadContext(nil); in {
+		t.Error("an unresolved channel (nil) is not an in-place thread")
+	}
+}
+
+// An in-thread mention is authorized against the thread's PARENT channel, since a
+// thread/post id is never itself in a channel allowlist.
+func TestAuthorizedParent(t *testing.T) {
+	open := &Bot{}
+	if !open.authorizedParent(authMsg("u9", "g9", "post1"), "forum1") {
+		t.Error("empty allowlist should authorize any in-thread mention")
+	}
+
+	b := &Bot{allowed: Allow{ChannelIDs: []string{"forum1"}}}
+	if !b.authorizedParent(authMsg("u", "g", "post1"), "forum1") {
+		t.Error("parent channel forum1 is allowlisted, should authorize")
+	}
+	if b.authorizedParent(authMsg("u", "g", "post1"), "forum2") {
+		t.Error("parent channel forum2 not in allowlist should be rejected")
+	}
+	if b.authorized(authMsg("u", "g", "post1")) {
+		t.Error("guard: the post id itself is not in the channel allowlist (proves why parent-based auth is needed)")
+	}
+}
+
 // A directive on the same line as the mention still parses.
 func TestStripMention_SameLineDirective(t *testing.T) {
 	stripped := stripMention("<@B> dagger/dagger codex effort=high\nfix it", "B", nil)

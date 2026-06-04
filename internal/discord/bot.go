@@ -95,7 +95,17 @@ func (b *Bot) onMessage(s *discordgo.Session, m *discordgo.MessageCreate) {
 	if !mentionsBot(m, botID, botRoles) {
 		return
 	}
-	if !b.authorized(m) {
+	// A mention inside an existing thread (commonly a forum post) runs in place:
+	// quack drives that thread rather than opening a new one. Resolve the channel
+	// to detect it and to authorize against the thread's parent — a thread/post id
+	// is never itself in a channel allowlist.
+	ch := resolveChannel(s, m.ChannelID)
+	inThread, threadName, parentID := threadContext(ch)
+	authed := b.authorized(m)
+	if inThread {
+		authed = b.authorizedParent(m, parentID)
+	}
+	if !authed {
 		_, _ = s.ChannelMessageSend(m.ChannelID, "🦆 not authorized")
 		return
 	}
@@ -121,6 +131,8 @@ func (b *Bot) onMessage(s *discordgo.Session, m *discordgo.MessageCreate) {
 		Content:     content,
 		Attachments: toAttachments(m.Attachments),
 		Origin:      origin,
+		InThread:    inThread,
+		ThreadName:  threadName,
 	}
 	go b.svc.Handle(context.Background(), req)
 }
@@ -209,6 +221,42 @@ func (b *Bot) authorizedThread(m *discordgo.MessageCreate) bool {
 func (b *Bot) authorizedReaction(guildID, userID string) bool {
 	return allows(b.allowed.UserIDs, userID) &&
 		allows(b.allowed.GuildIDs, guildID)
+}
+
+// resolveChannel returns the channel for channelID, preferring the gateway state
+// cache and falling back to a REST fetch. Returns nil when it can't be resolved —
+// the caller treats that as "not a thread", so the normal open-a-thread path runs.
+func resolveChannel(s *discordgo.Session, channelID string) *discordgo.Channel {
+	if s.State != nil {
+		if ch, err := s.State.Channel(channelID); err == nil && ch != nil {
+			return ch
+		}
+	}
+	ch, err := s.Channel(channelID)
+	if err != nil {
+		return nil
+	}
+	return ch
+}
+
+// threadContext reports whether a mention's channel is an existing thread — a
+// forum post or a regular thread — that quack should run in place rather than
+// opening a sub-thread (Discord can't nest threads). When it is, it returns the
+// thread's display name and its parent channel id; the parent is what a channel
+// allowlist is checked against, since the thread id itself is never listed.
+func threadContext(ch *discordgo.Channel) (inThread bool, name, parentID string) {
+	if ch == nil || !ch.IsThread() {
+		return false, "", ""
+	}
+	return true, ch.Name, ch.ParentID
+}
+
+// authorizedParent gates a mention that arrived inside a thread: user+guild as
+// usual, with the channel dimension checked against the thread's PARENT channel.
+func (b *Bot) authorizedParent(m *discordgo.MessageCreate, parentID string) bool {
+	return allows(b.allowed.UserIDs, m.Author.ID) &&
+		allows(b.allowed.GuildIDs, m.GuildID) &&
+		allows(b.allowed.ChannelIDs, parentID)
 }
 
 // allows reports whether id passes an allowlist dimension: an empty list
