@@ -206,3 +206,73 @@ func keys(fs *memFS) []string {
 	}
 	return out
 }
+
+// titleParts: an in-place session titles the thread with the post name verbatim
+// (no label); an ordinary session keeps the workspace label + session name.
+func TestTitleParts(t *testing.T) {
+	name, label := titleParts(sessionRecord{Name: "demo", Label: "acme/widget"})
+	if name != "demo" || label != "acme/widget" {
+		t.Errorf("ordinary: got %q,%q want demo,acme/widget", name, label)
+	}
+	name, label = titleParts(sessionRecord{Name: "demo", Label: "acme/widget", TitleBase: "Help with login"})
+	if name != "Help with login" || label != "" {
+		t.Errorf("in-place: got %q,%q want \"Help with login\",\"\"", name, label)
+	}
+}
+
+// An in-place headless session persists its title base + inPlace flag, and /stop
+// leaves the user's thread OPEN (no archive).
+func TestHeadless_InPlace_PersistsAndKeepsThreadOpen(t *testing.T) {
+	d := &fakeDriver{turns: []scripted{{texts: []string{"ok"}, ref: "s"}}}
+	svc, _, r, fs := newHeadlessServiceFakes(d)
+
+	svc.startHeadless(context.Background(), "claude", "post1", "/wt", "high", "demo", "acme/widget",
+		turnReq{channelID: "post1", messageID: "m1", text: "go"},
+		inPlaceOpts{inPlace: true, titleBase: "Help with login"})
+	svc.waitIdle("post1")
+
+	rec, ok := readRecord(t, fs, "demo")
+	if !ok {
+		t.Fatalf("no record persisted; files=%v", keys(fs))
+	}
+	if rec.TitleBase != "Help with login" || !rec.InPlace {
+		t.Errorf("record TitleBase=%q InPlace=%v, want \"Help with login\"/true", rec.TitleBase, rec.InPlace)
+	}
+
+	svc.StopThread(context.Background(), "post1")
+	for _, id := range r.archived {
+		if id == "post1" {
+			t.Errorf("in-place thread post1 must not be archived on stop; archived=%v", r.archived)
+		}
+	}
+	if !anyContains(r.posts, "session stopped") {
+		t.Errorf("expected a 'session stopped' post; posts=%v", r.posts)
+	}
+}
+
+// A rehydrated in-place session keeps its inPlace flag, so a restart-then-stop
+// still leaves the user's thread open.
+func TestHeadless_RehydrateInPlaceKeepsThreadOpen(t *testing.T) {
+	d := &fakeDriver{}
+	svc, g, r, fs := newHeadlessServiceFakes(d)
+	g.pathExists["/wt"] = true
+	seedRecord(fs, sessionRecord{
+		Name: "demo", AgentName: "claude", Workdir: "/wt",
+		ThreadID: "post1", RootChannelID: "post1", RootMessageID: "m1", SessionRef: "s1",
+		TitleBase: "Help with login", InPlace: true,
+	})
+
+	if n := svc.Rehydrate(context.Background()); n != 1 {
+		t.Fatalf("Rehydrate restored %d, want 1", n)
+	}
+	if got := svc.sessions["post1"]; got == nil || !got.inPlace || got.titleBase != "Help with login" {
+		t.Fatalf("restored session lost in-place state: %+v", got)
+	}
+
+	svc.StopThread(context.Background(), "post1")
+	for _, id := range r.archived {
+		if id == "post1" {
+			t.Errorf("rehydrated in-place thread must not be archived on stop; archived=%v", r.archived)
+		}
+	}
+}

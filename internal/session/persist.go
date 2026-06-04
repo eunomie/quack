@@ -19,7 +19,9 @@ import (
 // this process, and already outlive a restart.
 type sessionRecord struct {
 	Name          string `json:"name"`
-	Label         string `json:"label"` // workspace label for the thread title (owner/repo or dir)
+	Label         string `json:"label"`                // workspace label for the thread title (owner/repo or dir)
+	TitleBase     string `json:"title_base,omitempty"` // verbatim Discord title (post name); empty => name+label
+	InPlace       bool   `json:"in_place,omitempty"`   // user-owned thread; don't archive on stop
 	AgentName     string `json:"agent_name"`
 	Workdir       string `json:"workdir"`
 	Effort        string `json:"effort"`
@@ -37,6 +39,8 @@ func (ls *liveSession) record() sessionRecord {
 	return sessionRecord{
 		Name:          ls.name,
 		Label:         ls.label,
+		TitleBase:     ls.titleBase,
+		InPlace:       ls.inPlace,
 		AgentName:     ls.agentName,
 		Workdir:       ls.workdir,
 		Effort:        ls.effort,
@@ -66,10 +70,22 @@ func (s *Service) persistRecord(rec sessionRecord) {
 // tmux, so a later restart doesn't resurrect it.
 func (s *Service) removeRecord(name string) { _ = s.remove(s.recordPath(name)) }
 
+// titleParts chooses what the thread title is built from. An in-place session
+// (a forum post) uses the post's own name verbatim with no workspace label, so
+// threadTitle renders "<emoji> <post name>". An ordinary session uses the
+// workspace label + session name, as before.
+func titleParts(rec sessionRecord) (name, label string) {
+	if rec.TitleBase != "" {
+		return rec.TitleBase, ""
+	}
+	return rec.Name, rec.Label
+}
+
 // newSession builds a liveSession from a record, registers it under its thread,
 // and starts its runLoop. It does NOT enqueue a turn: startHeadless adds the
 // first turn; a rehydrated session waits for the next Discord message.
 func (s *Service) newSession(ctx context.Context, rec sessionRecord) *liveSession {
+	titleName, titleLabel := titleParts(rec)
 	turnCtx, cancel := context.WithCancel(ctx)
 	ls := &liveSession{
 		driver:    s.drivers[rec.AgentName],
@@ -78,6 +94,8 @@ func (s *Service) newSession(ctx context.Context, rec sessionRecord) *liveSessio
 		effort:    rec.Effort,
 		name:      rec.Name,
 		label:     rec.Label,
+		titleBase: rec.TitleBase,
+		inPlace:   rec.InPlace,
 		threadID:  rec.ThreadID,
 
 		sessionRef:    rec.SessionRef,
@@ -88,7 +106,7 @@ func (s *Service) newSession(ctx context.Context, rec sessionRecord) *liveSessio
 		done:   make(chan struct{}),
 		stop:   make(chan struct{}),
 		cancel: cancel,
-		title:  newTitleUpdater(s.reply, rec.ThreadID, rec.Name, rec.Label),
+		title:  newTitleUpdater(s.reply, rec.ThreadID, titleName, titleLabel),
 	}
 
 	s.hmu.Lock()

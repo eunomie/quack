@@ -299,7 +299,8 @@ func (s *Service) run(ctx context.Context, req Request, dir *command.Directive, 
 		}
 		report(mutedText(successMessage(prep, effort, ag) + "\n_(headless: reply in this thread to talk to it; `/stop` to end)_"))
 		s.startHeadless(ctx, agentName, threadID, prep.workdir, effort, prep.name, prep.label,
-			turnReq{channelID: req.Origin.ChannelID, messageID: req.Origin.MessageID, text: fullPrompt})
+			turnReq{channelID: req.Origin.ChannelID, messageID: req.Origin.MessageID, text: fullPrompt},
+			inPlaceOpts{inPlace: req.InThread, titleBase: req.ThreadName})
 		return
 	}
 

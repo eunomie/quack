@@ -20,6 +20,15 @@ type turnReq struct {
 	text      string
 }
 
+// inPlaceOpts carries the extras for a session that runs inside a user-owned
+// thread (a forum post): titleBase is the post's own name, used verbatim as the
+// Discord title (no owner/repo label); inPlace leaves the thread open on stop
+// instead of archiving it. The zero value is an ordinary auto-created thread.
+type inPlaceOpts struct {
+	inPlace   bool
+	titleBase string
+}
+
 type liveSession struct {
 	driver     agentproc.Driver
 	agentName  string
@@ -27,6 +36,8 @@ type liveSession struct {
 	effort     string
 	name       string
 	label      string // workspace label shown in the thread title (owner/repo or dir)
+	titleBase  string // verbatim Discord title (the post name); empty => name+label
+	inPlace    bool   // session runs in a user-owned thread; don't archive on stop
 	threadID   string
 	sessionRef string // guarded by mu (read by PromoteThread from another goroutine)
 
@@ -53,10 +64,16 @@ func (s *Service) UseDrivers(d map[string]agentproc.Driver) { s.drivers = d }
 // UseHistory supplies the Discord history reader for the fluent infer step.
 func (s *Service) UseHistory(h History) { s.history = h }
 
-func (s *Service) startHeadless(ctx context.Context, agentName, threadID, workdir, effort, name, label string, first turnReq) {
+func (s *Service) startHeadless(ctx context.Context, agentName, threadID, workdir, effort, name, label string, first turnReq, opts ...inPlaceOpts) {
+	var ip inPlaceOpts
+	if len(opts) > 0 {
+		ip = opts[0]
+	}
 	ls := s.newSession(ctx, sessionRecord{
 		Name:          name,
 		Label:         label,
+		TitleBase:     ip.titleBase,
+		InPlace:       ip.inPlace,
 		AgentName:     agentName,
 		Workdir:       workdir,
 		Effort:        effort,
@@ -112,9 +129,12 @@ func (s *Service) StopThread(ctx context.Context, threadID string) bool {
 	// makes clear it's no longer running, replacing whatever status it last carried.
 	s.markGlobalStopped(ctx, ls)
 	_, _ = s.reply.Post(ctx, threadID, "session stopped")
-	// Close the thread now the session is gone. It's already removed from the
-	// tracking map, so the resulting archive event no-ops in onThreadUpdate.
-	_ = s.reply.ArchiveThread(ctx, threadID)
+	// Close an auto-created thread now the session is gone (it's already removed
+	// from the tracking map, so the archive event no-ops in onThreadUpdate). An
+	// in-place thread is the user's own (a forum post) — leave it open.
+	if !ls.inPlace {
+		_ = s.reply.ArchiveThread(ctx, threadID)
+	}
 	return true
 }
 
