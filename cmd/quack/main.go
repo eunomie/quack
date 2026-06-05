@@ -15,6 +15,7 @@ import (
 
 	"github.com/eunomie/quack/internal/agentproc"
 	"github.com/eunomie/quack/internal/askmcp"
+	"github.com/eunomie/quack/internal/cmdexec"
 	"github.com/eunomie/quack/internal/config"
 	"github.com/eunomie/quack/internal/discord"
 	"github.com/eunomie/quack/internal/gitexec"
@@ -49,6 +50,12 @@ func main() {
 		ThreadAutoArchiveMin: cfg.Discord.ThreadAutoArchiveMinutes,
 		AskTimeout:           time.Duration(cfg.AskTimeoutMinutes) * time.Minute,
 		Agents:               cfg.Agents,
+	}
+	for _, fc := range cfg.FastCommands {
+		scfg.FastCommands = append(scfg.FastCommands, session.FastCommand{
+			Trigger: fc.Trigger,
+			Argv:    fc.Argv,
+		})
 	}
 
 	var svc *session.Service
@@ -103,6 +110,7 @@ func main() {
 	}, func(r session.Replier) *session.Service {
 		svc = session.New(scfg, g, tx, r)
 		svc.UseDrivers(drivers)
+		svc.UseRunner(cmdexec.New())
 		if h, ok := r.(session.History); ok {
 			svc.UseHistory(h)
 		}

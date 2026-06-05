@@ -12,6 +12,14 @@ import (
 	"github.com/eunomie/quack/internal/agent"
 )
 
+// FastCommand maps a trigger token to an argv quack execs directly in a tracked
+// session thread, skipping the agent. Mirrors session.FastCommand; mapped to it
+// in main.go.
+type FastCommand struct {
+	Trigger string   `toml:"trigger"`
+	Argv    []string `toml:"argv"`
+}
+
 // Config is the full quack configuration.
 type Config struct {
 	DevSrcRoot        string                 `toml:"dev_src_root"`
@@ -27,6 +35,7 @@ type Config struct {
 	AskTimeoutMinutes int                    `toml:"ask_timeout_minutes"` // how long ask_user waits for the owner (default: 10)
 	Discord           Discord                `toml:"discord"`
 	Agents            map[string]agent.Agent `toml:"agents"`
+	FastCommands      []FastCommand          `toml:"fast_commands"`
 }
 
 // Discord holds Discord-specific settings.
