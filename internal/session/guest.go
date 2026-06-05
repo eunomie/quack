@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/eunomie/quack/internal/agentproc"
 	"github.com/eunomie/quack/internal/command"
 	"github.com/eunomie/quack/internal/repo"
 )
@@ -84,4 +85,45 @@ func (s *Service) guestReattachSpec(rec sessionRecord) SandboxSpec {
 		EgressAllow:  s.guest.EgressAllow,
 		ModelMounts:  s.guest.ModelMounts,
 	}
+}
+
+// guestDriver returns the agent driver for guest sessions: the base driver with
+// guest tool/skill restrictions applied. Only claude supports tool filtering;
+// other agents (codex) are returned unchanged (codex has no skills).
+func (s *Service) guestDriver(agentName string) agentproc.Driver {
+	base := s.drivers[agentName]
+	c, ok := base.(agentproc.Claude)
+	if !ok {
+		return base
+	}
+	allowed, disallowed := claudeGuestToolFlags(s.guest)
+	c.AllowedTools = allowed
+	c.DisallowedTools = disallowed
+	return c
+}
+
+// claudeGuestToolFlags encodes the guest tool/skill policy into claude
+// --allowedTools/--disallowedTools values. Individual skills are matched as
+// Skill(<name>) (exact matcher token confirmed in host-verification spike P3).
+//
+// NOTE: AllowedSkills is carried in GuestPolicy but the default guest
+// restriction is expressed via DisallowedSkills. The allow-list mechanism for
+// skills is deferred to P3 once the exact claude matcher semantics are
+// confirmed — do not add it prematurely.
+func claudeGuestToolFlags(p GuestPolicy) (allowed, disallowed string) {
+	allowed = p.AllowedTools
+	disallowed = p.DisallowedTools
+	for _, sk := range p.DisallowedSkills {
+		disallowed = appendCSV(disallowed, "Skill("+sk+")")
+	}
+	return allowed, disallowed
+}
+
+// appendCSV appends item to a comma-separated list, or returns item if the
+// list is empty.
+func appendCSV(csv, item string) string {
+	if csv == "" {
+		return item
+	}
+	return csv + "," + item
 }

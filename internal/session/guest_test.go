@@ -2,6 +2,7 @@ package session
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"github.com/eunomie/quack/internal/agentproc"
@@ -86,6 +87,28 @@ func TestPrepareGuestEmptySandboxNoTarget(t *testing.T) {
 	}
 	if prep.sandbox == nil || prep.launcher == nil {
 		t.Fatal("empty sandbox still gets a handle + launcher")
+	}
+}
+
+func TestGuestDriverAppliesToolPolicy(t *testing.T) {
+	s := New(Config{}, nil, nil, nil)
+	s.UseDrivers(map[string]agentproc.Driver{"claude": agentproc.Claude{Command: "claude", PermissionMode: "auto"}})
+	s.UseSandbox(&fakeSandboxer{}, GuestPolicy{
+		DisallowedSkills: []string{"open-zed"},
+		AllowedSkills:    []string{"revue"},
+	})
+	d := s.guestDriver("claude")
+	c, ok := d.(agentproc.Claude)
+	if !ok {
+		t.Fatalf("expected claude driver, got %T", d)
+	}
+	if !strings.Contains(c.DisallowedTools, "open-zed") {
+		t.Fatalf("guest claude must disallow open-zed: %q", c.DisallowedTools)
+	}
+	// non-claude driver is returned unchanged
+	s.UseDrivers(map[string]agentproc.Driver{"codex": agentproc.Codex{Command: "codex"}})
+	if _, ok := s.guestDriver("codex").(agentproc.Codex); !ok {
+		t.Fatal("codex guest driver should be unchanged codex")
 	}
 }
 

@@ -136,6 +136,11 @@ func (s *Service) newSession(ctx context.Context, rec sessionRecord) *liveSessio
 		ls.sandbox = rec.Sandbox
 		ls.launcher = s.sandbox.Launcher(rec.Sandbox)
 	}
+	// Guest sessions run with a tool-restricted driver so host-escaping skills
+	// (e.g. open-zed) are blocked. Owner sessions keep the base driver unchanged.
+	if rec.Role.IsGuest() {
+		ls.driver = s.guestDriver(rec.AgentName)
+	}
 
 	s.hmu.Lock()
 	if s.sessions == nil {

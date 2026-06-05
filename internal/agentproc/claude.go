@@ -18,7 +18,11 @@ type Claude struct {
 	NameTemplate   string
 	PermissionMode string
 	AllowedTools   string
-	Settings       string // passed verbatim to `claude --settings` (JSON or file path)
+	// DisallowedTools is passed verbatim to `claude --disallowedTools`
+	// (e.g. "Skill(open-zed),Skill(other)"). Empty means no restriction.
+	// Exact Skill(<name>) matcher form confirmed in host-verification spike P3.
+	DisallowedTools string
+	Settings        string // passed verbatim to `claude --settings` (JSON or file path)
 
 	// AskMCPURL is the base URL of quack's ask_user MCP server (empty disables the
 	// feature). When set on a streaming session, the per-session OpenOpts.AskToken
@@ -44,6 +48,9 @@ func (d Claude) args(t Turn) []string {
 	a := []string{"-p", t.Prompt, "--output-format", "stream-json", "--verbose", "--permission-mode", mode}
 	if d.AllowedTools != "" {
 		a = append(a, "--allowedTools", d.AllowedTools)
+	}
+	if d.DisallowedTools != "" {
+		a = append(a, "--disallowedTools", d.DisallowedTools)
 	}
 	if d.Settings != "" {
 		a = append(a, "--settings", d.Settings)

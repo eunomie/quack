@@ -108,3 +108,13 @@ func contains(ss []string, s string) bool {
 	}
 	return false
 }
+
+func containsArg(args []string, want string) bool { return contains(args, want) }
+
+func TestClaudeArgsIncludesDisallowedTools(t *testing.T) {
+	d := Claude{DisallowedTools: "Skill(open-zed)"}
+	args := d.args(Turn{Prompt: "hi"})
+	if !containsArg(args, "--disallowedTools") || !containsArg(args, "Skill(open-zed)") {
+		t.Fatalf("args missing disallowedTools: %v", args)
+	}
+}
