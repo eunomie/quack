@@ -1,9 +1,20 @@
 # quack — mid-turn interjection & owner-answered questions
 
 - **Date:** 2026-06-05
-- **Status:** Proposed design, pre-implementation
+- **Status:** Implemented
 - **Author:** Yves Brissaud
 - **Builds on:** `hack/designs/2026-06-01-quack-headless-bidirectional-design.md`
+
+> **Implemented as designed**, with the three decisions resolved to their
+> recommendations: (1) hand-rolled minimal MCP HTTP server, no new dependency
+> (`internal/askmcp`); (2) full streaming-driver model for interjection; (3)
+> claude-first, codex unchanged. Interjection is implemented as **interrupt +
+> resend** on the live process: a verified `control_request{interrupt}` cuts off
+> the in-flight turn (which ends as `result subtype=error_during_execution`) so
+> the agent reads the interjected message next — the agent genuinely sees the new
+> message rather than queuing it behind the whole turn. Verified end-to-end
+> against the real claude CLI (streaming session + MCP `ask_user` round-trip,
+> integration tests gated on `QUACK_INTEGRATION`).
 
 ## Summary
 

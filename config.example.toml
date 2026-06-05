@@ -9,6 +9,7 @@ name_agent     = "claude"     # agent used to auto-name sessions (best summarize
 # infer_agent = "claude"        # agent for the default fluent (natural-language) path (default: name_agent)
 # infer_effort = "medium"       # effort for the infer one-shot; lower = faster (low|medium|high|xhigh)
 # infer_history_limit = 20      # recent channel messages fed to the infer agent for context
+# ask_timeout_minutes = 10      # how long a headless agent's ask_user question waits for your answer before it proceeds on its own
 # Standing hints for the INFER agent only (not the working agent); used only to
 # resolve targets/names — never invent a target when the request names none.
 # infer_guidance = """

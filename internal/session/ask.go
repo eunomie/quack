@@ -38,10 +38,10 @@ func (p *pendingAsk) cancel() { p.once.Do(func() { close(p.done) }) }
 
 var errAskAbandoned = errors.New("question abandoned (session ended)")
 
-// resolveAsk is the askmcp.AskFunc: it maps a tool call's session token back to a
+// ResolveAsk is the askmcp.AskFunc: it maps a tool call's session token back to a
 // live session and blocks on the owner's answer. Unknown token → error (reported
 // to the agent as a tool error).
-func (s *Service) resolveAsk(ctx context.Context, token string, q askmcp.Question) (askmcp.Answer, error) {
+func (s *Service) ResolveAsk(ctx context.Context, token string, q askmcp.Question) (askmcp.Answer, error) {
 	s.hmu.Lock()
 	ls, ok := s.askByToken[token]
 	s.hmu.Unlock()

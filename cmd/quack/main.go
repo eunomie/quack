@@ -5,12 +5,16 @@ import (
 	"context"
 	"flag"
 	"log"
+	"net"
+	"net/http"
 	"os"
 	"os/signal"
 	"path/filepath"
 	"syscall"
+	"time"
 
 	"github.com/eunomie/quack/internal/agentproc"
+	"github.com/eunomie/quack/internal/askmcp"
 	"github.com/eunomie/quack/internal/config"
 	"github.com/eunomie/quack/internal/discord"
 	"github.com/eunomie/quack/internal/gitexec"
@@ -43,8 +47,28 @@ func main() {
 		InferHistoryLimit:    cfg.InferHistoryLimit,
 		StateDir:             cfg.StateDir,
 		ThreadAutoArchiveMin: cfg.Discord.ThreadAutoArchiveMinutes,
+		AskTimeout:           time.Duration(cfg.AskTimeoutMinutes) * time.Minute,
 		Agents:               cfg.Agents,
 	}
+
+	var svc *session.Service
+
+	// Owner-answered questions: serve the ask_user MCP tool on a localhost port and
+	// hand each headless claude its base URL. resolveAsk runs once svc exists (well
+	// before any session can ask), so the closure captures it safely.
+	askLn, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		log.Fatalf("ask server listen: %v", err)
+	}
+	askURL := "http://" + askLn.Addr().String() + "/mcp"
+	askSrv := askmcp.New(func(ctx context.Context, token string, q askmcp.Question) (askmcp.Answer, error) {
+		return svc.ResolveAsk(ctx, token, q)
+	})
+	go func() {
+		if err := http.Serve(askLn, askSrv); err != nil {
+			log.Printf("ask server stopped: %v", err)
+		}
+	}()
 
 	g := gitexec.New()
 	tx := tmuxexec.New()
@@ -63,6 +87,7 @@ func main() {
 				PermissionMode: a.Mode(),
 				AllowedTools:   a.AllowedTools,
 				Settings:       a.Settings,
+				AskMCPURL:      askURL,
 			}
 		case "codex":
 			drivers[name] = agentproc.Codex{Command: a.Command, EffortTemplate: a.EffortTemplate}
@@ -71,7 +96,6 @@ func main() {
 		}
 	}
 
-	var svc *session.Service
 	bot, err := discord.New(cfg.Discord.Token, discord.Allow{
 		UserIDs:    cfg.Discord.UserIDs(),
 		GuildIDs:   cfg.Discord.GuildIDs(),

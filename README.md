@@ -60,10 +60,15 @@ Investigate the directory cache pin bug; reproduce with a failing test.
 quack replies in a per-session thread. In **headless** mode (the default) it
 runs the agent non-interactively, posting the answer in segments as it's
 produced (tool steps inline), and you reply in-thread to send another turn. Status shows as a reaction on your
-message (👀 working → ✅ answered · ❌ error). Post **`/attach`** to promote the
-session to a local tmux session you can jump into — same conversation, with
-terminal + files; post `/stop`, react 🛑 (or a custom `:stop:`) on any of the
-session's messages, or archive the thread to end it. With
+message (👀 working → ✅ answered · ❌ error). A reply you send **while the agent
+is working** interrupts the current turn so it reads your message and steers
+mid-task, rather than waiting for the turn to finish. When the agent needs a
+decision only you can make, it asks **in the thread** and waits for your answer —
+tap a number reaction to pick an option or just reply (if you're away, it
+proceeds on its own after a timeout and tells you what it chose). Post
+**`/attach`** to promote the session to a local tmux session you can jump into —
+same conversation, with terminal + files; post `/stop`, react 🛑 (or a custom
+`:stop:`) on any of the session's messages, or archive the thread to end it. With
 **`no-headless`** it starts an interactive tmux session from the start, with no
 Discord back-channel:
 

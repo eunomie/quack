@@ -24,6 +24,7 @@ type Config struct {
 	InferGuidance     string                 `toml:"infer_guidance"`      // standing hints folded into the infer prompt (empty => off)
 	InferHistoryLimit int                    `toml:"infer_history_limit"` // recent messages fed to the infer agent (default: 20)
 	StateDir          string                 `toml:"state_dir"`
+	AskTimeoutMinutes int                    `toml:"ask_timeout_minutes"` // how long ask_user waits for the owner (default: 10)
 	Discord           Discord                `toml:"discord"`
 	Agents            map[string]agent.Agent `toml:"agents"`
 }
@@ -107,6 +108,9 @@ func Load(path string) (*Config, error) {
 	}
 	if cfg.InferHistoryLimit == 0 {
 		cfg.InferHistoryLimit = 20
+	}
+	if cfg.AskTimeoutMinutes == 0 {
+		cfg.AskTimeoutMinutes = 10
 	}
 	if cfg.Discord.ThreadAutoArchiveMinutes == 0 {
 		cfg.Discord.ThreadAutoArchiveMinutes = 10080

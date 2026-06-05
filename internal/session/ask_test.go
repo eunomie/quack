@@ -31,7 +31,7 @@ func TestAsk_ReactionAnswer(t *testing.T) {
 	}
 	done := make(chan res, 1)
 	go func() {
-		a, err := svc.resolveAsk(context.Background(), ls.askToken,
+		a, err := svc.ResolveAsk(context.Background(), ls.askToken,
 			askmcp.Question{Header: "REPL", Text: "Inline or expanded?", Options: []string{"inline", "expanded"}})
 		done <- res{a, err}
 	}()
@@ -64,7 +64,7 @@ func TestAsk_TextAnswer(t *testing.T) {
 	svc, ls, _ := newAskSession(t)
 	done := make(chan askmcp.Answer, 1)
 	go func() {
-		a, _ := svc.resolveAsk(context.Background(), ls.askToken, askmcp.Question{Text: "what name?"})
+		a, _ := svc.ResolveAsk(context.Background(), ls.askToken, askmcp.Question{Text: "what name?"})
 		done <- a
 	}()
 	waitFor(t, "pending ask", func() bool { return svc.HasPendingAsk("thread-1") })
@@ -80,7 +80,7 @@ func TestAsk_TextAnswer(t *testing.T) {
 // A number reaction on a different message, or out of range, is not an answer.
 func TestAsk_ReactionIgnoredWhenNotMatching(t *testing.T) {
 	svc, ls, _ := newAskSession(t)
-	go svc.resolveAsk(context.Background(), ls.askToken,
+	go svc.ResolveAsk(context.Background(), ls.askToken,
 		askmcp.Question{Text: "a or b?", Options: []string{"a", "b"}})
 	waitFor(t, "pending ask", func() bool { return svc.HasPendingAsk("thread-1") })
 
@@ -99,7 +99,7 @@ func TestAsk_TimeoutFallback(t *testing.T) {
 	svc, ls, r := newAskSession(t)
 	svc.cfg.AskTimeout = 20 * time.Millisecond
 
-	a, err := svc.resolveAsk(context.Background(), ls.askToken, askmcp.Question{Text: "slow?"})
+	a, err := svc.ResolveAsk(context.Background(), ls.askToken, askmcp.Question{Text: "slow?"})
 	if err != nil {
 		t.Fatalf("timeout should not be an error: %v", err)
 	}
@@ -113,7 +113,7 @@ func TestAsk_TimeoutFallback(t *testing.T) {
 
 func TestAsk_UnknownToken(t *testing.T) {
 	svc, _, _ := newAskSession(t)
-	if _, err := svc.resolveAsk(context.Background(), "bogus", askmcp.Question{Text: "x?"}); err == nil {
+	if _, err := svc.ResolveAsk(context.Background(), "bogus", askmcp.Question{Text: "x?"}); err == nil {
 		t.Errorf("unknown token should error")
 	}
 }
@@ -122,7 +122,7 @@ func TestAsk_StopAbandonsPending(t *testing.T) {
 	svc, ls, _ := newAskSession(t)
 	done := make(chan error, 1)
 	go func() {
-		_, err := svc.resolveAsk(context.Background(), ls.askToken, askmcp.Question{Text: "wait?"})
+		_, err := svc.ResolveAsk(context.Background(), ls.askToken, askmcp.Question{Text: "wait?"})
 		done <- err
 	}()
 	waitFor(t, "pending ask", func() bool { return svc.HasPendingAsk("thread-1") })
