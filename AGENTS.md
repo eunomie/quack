@@ -84,6 +84,14 @@ Interfaces (defined consumer-side in `internal/session/service.go`) and their ad
    authorizes the channel allowlist against the thread's **parent**, and leaves the
    post open on `/stop` (it's the user's). `Request.InThread` / `Request.ThreadName`
    carry this; see `hack/designs/2026-06-04-forum-in-place-sessions.md`.
+
+   A message in a tracked thread whose **first word is a configured fast command**
+   (`[[fast_commands]]`, e.g. `/revue`, `/open-zed`) is intercepted before
+   `FeedThread`: quack execs the command's argv directly in the session's
+   `workdir` (`Service.RunFastCommand` → `Runner`/`internal/cmdexec`), posts the
+   output, and never starts an agent turn. The directory is unambiguous because a
+   headless session's `workdir` is fixed and each turn resets the agent's cwd to
+   it. See `hack/designs/2026-06-05-fast-slash-commands.md`.
 2. `Service.Handle` (`service.go`) — the spine: route the message (fluent infer by
    default, or the explicit `!` grammar) into a directive → resolve agent → open a
    Discord thread + post an ack → (if no explicit `name=`) ask the agent to suggest

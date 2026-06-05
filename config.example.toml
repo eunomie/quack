@@ -57,3 +57,16 @@ headless        = true
 # model           = "claude-haiku-4-5-20251001"
 # effort_template = "--effort {effort}"
 # headless        = true
+
+# Fast commands: a trigger token quack execs DIRECTLY in a tracked session
+# thread, skipping the agent — for pure launchers like revue/open-zed where the
+# agent round-trip adds latency for no decision. The user's trailing words become
+# arguments; the command runs in the session's worktree. Only fires inside an
+# existing session thread, where the directory is unambiguous.
+# [[fast_commands]]
+# trigger = "/revue"
+# argv    = ["/home/you/.claude/skills/revue/revue.sh"]
+#
+# [[fast_commands]]
+# trigger = "/open-zed"
+# argv    = ["/home/you/.claude/skills/open-zed/open-zed.sh"]
