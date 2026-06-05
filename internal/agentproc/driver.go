@@ -12,6 +12,9 @@ type Turn struct {
 	Workdir    string // child process working directory (the worktree)
 	Effort     string // pass-through; applied on the first turn only
 	Name       string // session display name; applied on the first turn only
+	// Launcher decides where the turn's child process runs (host vs container).
+	// nil means run directly on the host (DirectLauncher).
+	Launcher Launcher
 }
 
 // Event is emitted while a turn runs.

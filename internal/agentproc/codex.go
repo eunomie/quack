@@ -32,8 +32,11 @@ func (d Codex) RunTurn(ctx context.Context, t Turn, emit func(Event)) TurnDone {
 	if command == "" {
 		command = "codex"
 	}
-	cmd := exec.CommandContext(ctx, command, d.args(t)...)
-	cmd.Dir = t.Workdir
+	l := t.Launcher
+	if l == nil {
+		l = DirectLauncher{}
+	}
+	cmd := l.Command(ctx, command, d.args(t), t.Workdir, nil)
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
 		return TurnDone{Err: err}
