@@ -80,6 +80,12 @@ func (b *Bot) onMessage(s *discordgo.Session, m *discordgo.MessageCreate) {
 			b.svc.PromoteThread(context.Background(), m.ChannelID)
 			return
 		}
+		// While the agent is blocked on an ask_user question, a text reply is the
+		// answer, not a new turn. Empty content (an attachment-only message) falls
+		// through to FeedThread so it can still interject.
+		if content != "" && b.svc.AnswerAskText(m.ChannelID, content) {
+			return
+		}
 		b.svc.FeedThread(context.Background(), m.ChannelID, m.ChannelID, m.ID, content, atts)
 		return
 	}
@@ -173,13 +179,16 @@ func (b *Bot) onReaction(s *discordgo.Session, r *discordgo.MessageReactionAdd) 
 	if s.State == nil || s.State.User == nil || r.UserID == s.State.User.ID {
 		return
 	}
-	if !isStopReaction(r.Emoji) {
-		return
-	}
 	if !b.authorizedReaction(r.GuildID, r.UserID) {
 		return
 	}
-	b.svc.StopByMessage(context.Background(), r.ChannelID, r.MessageID)
+	if isStopReaction(r.Emoji) {
+		b.svc.StopByMessage(context.Background(), r.ChannelID, r.MessageID)
+		return
+	}
+	// A number reaction on a pending ask_user question is the owner's answer. A
+	// reaction always lands inside the thread, whose id is the session key.
+	b.svc.AnswerAskReaction(r.ChannelID, r.MessageID, r.Emoji.Name)
 }
 
 // isStopReaction reports whether a reaction should halt a session: the unicode
