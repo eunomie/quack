@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"strings"
+
+	"github.com/eunomie/quack/internal/agentproc"
 )
 
 // Mount is a host:container bind, mounted read-only into the agent container
@@ -201,4 +203,51 @@ func repoBase(url string) string {
 		return u[i+1:]
 	}
 	return u
+}
+
+// Teardown removes the whole container set. Best-effort: continues past
+// individual failures so a partial provision can still be cleaned up.
+func (p *DockerProvisioner) Teardown(ctx context.Context, h *Handle) error {
+	for _, c := range []string{h.AgentContainer, h.DindContainer, h.ProxyContainer} {
+		if c != "" {
+			_ = p.D.Remove(ctx, c)
+		}
+	}
+	for _, n := range []string{h.IntNetwork, h.ExtNetwork} {
+		if n != "" {
+			_ = p.D.RemoveNetwork(ctx, n)
+		}
+	}
+	for _, v := range []string{h.WorkVolume, h.CertVolume} {
+		if v != "" {
+			_ = p.D.RemoveVolume(ctx, v)
+		}
+	}
+	return nil
+}
+
+// Launcher returns the per-session launcher that runs turns inside the agent
+// container.
+func (p *DockerProvisioner) Launcher(h *Handle) agentproc.Launcher {
+	return agentproc.ContainerLauncher{Container: h.AgentContainer, Workdir: h.Workdir}
+}
+
+// Reattach restores a sandbox after a quack restart. If the agent container
+// still exists (running or stopped), it just (re)starts the set. If the
+// containers are gone but the work volume persists (e.g. host reboot with manual
+// container pruning), it rebuilds them via bringUp WITHOUT re-cloning — the work
+// volume already holds the clone. Secrets come from spec (current config), never
+// from the persisted handle.
+//
+// NOTE (host-verification follow-up): on the rebuild path the networks/volumes
+// from the original provision may still exist; making the create calls tolerant
+// of "already exists" is validated against real Docker in the integration step.
+func (p *DockerProvisioner) Reattach(ctx context.Context, h *Handle, spec Spec) error {
+	if p.D.Exists(ctx, h.AgentContainer) {
+		_ = p.D.Start(ctx, h.ProxyContainer)
+		_ = p.D.Start(ctx, h.DindContainer)
+		_ = p.D.Start(ctx, h.AgentContainer)
+		return nil
+	}
+	return p.bringUp(ctx, h, spec)
 }
