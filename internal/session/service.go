@@ -325,6 +325,10 @@ func (s *Service) run(ctx context.Context, req Request, dir *command.Directive, 
 	}
 
 	if req.Role.IsGuest() {
+		if s.sandbox == nil {
+			fail("guest sandboxing is not configured on this server")
+			return
+		}
 		if err := guestTargetAllowed(dir.Target); err != nil {
 			fail(err.Error())
 			return

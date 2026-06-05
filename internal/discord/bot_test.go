@@ -6,7 +6,37 @@ import (
 	"github.com/bwmarrin/discordgo"
 
 	"github.com/eunomie/quack/internal/command"
+	"github.com/eunomie/quack/internal/session"
 )
+
+func TestResolveRole(t *testing.T) {
+	b := &Bot{allowed: Allow{
+		OwnerUserIDs: []string{"owner"},
+		GuestRoleIDs: []string{"guildrole"},
+		GuildIDs:     []string{"g"},
+	}}
+	// owner id -> owner
+	if role, ok := b.resolveRole("owner", "g", "chan", nil); !ok || role != session.RoleOwner {
+		t.Fatalf("owner: role=%v ok=%v", role, ok)
+	}
+	// member holding the guest role, in an allowed guild -> guest
+	if role, ok := b.resolveRole("someone", "g", "chan", []string{"guildrole"}); !ok || role != session.RoleGuest {
+		t.Fatalf("guest: role=%v ok=%v", role, ok)
+	}
+	// neither owner nor guest-role -> rejected
+	if _, ok := b.resolveRole("nobody", "g", "chan", []string{"other"}); ok {
+		t.Fatal("should be rejected")
+	}
+	// guest role but wrong guild -> rejected
+	if _, ok := b.resolveRole("someone", "other", "chan", []string{"guildrole"}); ok {
+		t.Fatal("guest outside allowed guild should be rejected")
+	}
+	// SECURITY: empty owner list must NOT make everyone an owner
+	b2 := &Bot{allowed: Allow{GuildIDs: []string{"g"}}}
+	if _, ok := b2.resolveRole("anyone", "g", "chan", nil); ok {
+		t.Fatal("empty owner list + no guest role must reject")
+	}
+}
 
 func msg(mentions []string, roles []string) *discordgo.MessageCreate {
 	var users []*discordgo.User

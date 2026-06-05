@@ -24,11 +24,15 @@ type Bot struct {
 }
 
 // Allow is the authorization allowlist. Each dimension is a set of permitted
-// ids; an empty list means "any" for that dimension.
+// ids; an empty list means "any" for that dimension (except OwnerUserIDs, where
+// empty means no-one is an owner, not everyone — the "any" loophole is
+// intentionally absent for the trust-level decision).
 type Allow struct {
-	UserIDs    []string
-	GuildIDs   []string
-	ChannelIDs []string // empty = any channel in the guild
+	UserIDs      []string
+	GuildIDs     []string
+	ChannelIDs   []string // empty = any channel in the guild
+	OwnerUserIDs []string // explicit owners; empty = no owners (NOT "any")
+	GuestRoleIDs []string // Discord role ids whose members are guests
 }
 
 // New builds a Bot. svcFor returns the orchestrator for a given Replier so the
@@ -114,11 +118,14 @@ func (b *Bot) onMessage(s *discordgo.Session, m *discordgo.MessageCreate) {
 	// is never itself in a channel allowlist.
 	ch := resolveChannel(s, m.ChannelID)
 	inThread, threadName, parentID := threadContext(ch)
-	authed := b.authorized(m)
+	// Authorize + resolve the user's role (owner vs sandboxed guest). When the
+	// mention is in a thread, the channel allowlist is gated on the parent.
+	authChannel := m.ChannelID
 	if inThread {
-		authed = b.authorizedParent(m, parentID)
+		authChannel = parentID
 	}
-	if !authed {
+	role, ok := b.resolveRole(m.Author.ID, m.GuildID, authChannel, memberRoleIDs(m.Member))
+	if !ok {
 		_, _ = s.ChannelMessageSend(m.ChannelID, "🦆 not authorized")
 		return
 	}
@@ -146,6 +153,7 @@ func (b *Bot) onMessage(s *discordgo.Session, m *discordgo.MessageCreate) {
 		Origin:      origin,
 		InThread:    inThread,
 		ThreadName:  threadName,
+		Role:        role,
 	}
 	go b.svc.Handle(context.Background(), req)
 }
@@ -217,6 +225,36 @@ func (b *Bot) onThreadUpdate(s *discordgo.Session, t *discordgo.ThreadUpdate) {
 	if b.svc.Tracked(t.ID) {
 		b.svc.StopThread(context.Background(), t.ID)
 	}
+}
+
+// resolveRole decides a user's trust level. Owners (explicit id match) get full
+// access. Otherwise a member holding a configured guest role, inside an allowed
+// guild+channel, is a guest. ok=false => the request is rejected.
+func (b *Bot) resolveRole(userID, guildID, channelID string, memberRoles []string) (session.Role, bool) {
+	for _, id := range b.allowed.OwnerUserIDs {
+		if id == userID {
+			return session.RoleOwner, true
+		}
+	}
+	if !allows(b.allowed.GuildIDs, guildID) || !allows(b.allowed.ChannelIDs, channelID) {
+		return 0, false
+	}
+	for _, want := range b.allowed.GuestRoleIDs {
+		for _, have := range memberRoles {
+			if want == have {
+				return session.RoleGuest, true
+			}
+		}
+	}
+	return 0, false
+}
+
+// memberRoleIDs returns the author's guild role ids (nil-safe).
+func memberRoleIDs(m *discordgo.Member) []string {
+	if m == nil {
+		return nil
+	}
+	return m.Roles
 }
 
 func (b *Bot) authorized(m *discordgo.MessageCreate) bool {

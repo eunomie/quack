@@ -104,9 +104,11 @@ func main() {
 	}
 
 	bot, err := discord.New(cfg.Discord.Token, discord.Allow{
-		UserIDs:    cfg.Discord.UserIDs(),
-		GuildIDs:   cfg.Discord.GuildIDs(),
-		ChannelIDs: cfg.Discord.ChannelIDs(),
+		UserIDs:      cfg.Discord.UserIDs(),
+		GuildIDs:     cfg.Discord.GuildIDs(),
+		ChannelIDs:   cfg.Discord.ChannelIDs(),
+		OwnerUserIDs: cfg.Discord.OwnerIDs(),
+		GuestRoleIDs: cfg.Discord.GuestRoles(),
 	}, func(r session.Replier) *session.Service {
 		svc = session.New(scfg, g, tx, r)
 		svc.UseDrivers(drivers)
