@@ -34,6 +34,7 @@ type Config struct {
 	StateDir          string                 `toml:"state_dir"`
 	AskTimeoutMinutes int                    `toml:"ask_timeout_minutes"` // how long ask_user waits for the owner (default: 10)
 	Discord           Discord                `toml:"discord"`
+	Guest             Guest                  `toml:"guest"`
 	Agents            map[string]agent.Agent `toml:"agents"`
 	FastCommands      []FastCommand          `toml:"fast_commands"`
 }
@@ -139,6 +140,10 @@ func Load(path string) (*Config, error) {
 	}
 	if cfg.Agents == nil {
 		cfg.Agents = map[string]agent.Agent{}
+	}
+	cfg.Guest = cfg.Guest.WithDefaults()
+	if v := os.Getenv("QUACK_GUEST_GITHUB_PAT"); v != "" {
+		cfg.Guest.GitHubPAT = v
 	}
 	return &cfg, nil
 }
