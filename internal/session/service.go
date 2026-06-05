@@ -324,6 +324,16 @@ func (s *Service) run(ctx context.Context, req Request, dir *command.Directive, 
 		report("❌ " + msg)
 	}
 
+	if req.Role.IsGuest() {
+		if err := guestTargetAllowed(dir.Target); err != nil {
+			fail(err.Error())
+			return
+		}
+		if note := clampGuestDirective(dir); note != "" {
+			_, _ = s.reply.PostSilent(ctx, threadID, mutedText("🔒 "+note))
+		}
+	}
+
 	// With no explicit name and none pre-supplied, ask the agent to name the task
 	// (falls back to the repo-base-random scheme if it errors or no driver exists).
 	if !explicit && suggested == "" {
