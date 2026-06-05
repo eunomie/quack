@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+
+	"github.com/eunomie/quack/internal/agentproc"
 )
 
 // sessionRecord is the durable state of a headless session, written under
@@ -116,7 +118,13 @@ func (s *Service) newSession(ctx context.Context, rec sessionRecord) *liveSessio
 	s.sessions[rec.ThreadID] = ls
 	s.hmu.Unlock()
 
-	go s.runLoop(turnCtx, ls)
+	// A StreamDriver (claude) runs one persistent process the owner can interject
+	// into; a plain Driver (codex) keeps the per-turn loop.
+	if _, ok := ls.driver.(agentproc.StreamDriver); ok {
+		go s.runStreamLoop(turnCtx, ls)
+	} else {
+		go s.runLoop(turnCtx, ls)
+	}
 	return ls
 }
 

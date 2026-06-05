@@ -2,7 +2,6 @@ package session
 
 import (
 	"context"
-	"strings"
 	"sync"
 	"time"
 
@@ -47,6 +46,11 @@ type liveSession struct {
 	rootChannelID   string
 	rootMessageID   string
 	lastGlobalEmoji string
+
+	// sess is the live streaming process for a StreamDriver (claude). It is owned
+	// by the stream loop goroutine — opened lazily on the first turn and reopened
+	// (resuming by ref) if the process dies. nil for the per-turn (codex) path.
+	sess agentproc.Session
 
 	queue  chan turnReq
 	done   chan struct{}
@@ -319,72 +323,15 @@ func (s *Service) clearGlobalWorking(ctx context.Context, ls *liveSession) {
 	}
 }
 
+// runTurn runs one per-turn (codex) turn: it tracks the latest status globally on
+// the root message (visible in the channel — turn 1's trigger IS the root, so it
+// needs no separate per-turn marker; in-thread follow-ups get their own), renders
+// the event stream, and applies the terminal status.
 func (s *Service) runTurn(ctx context.Context, ls *liveSession, tr turnReq) {
-	// Track the latest status globally on the root message (visible in the
-	// channel). Turn 1's trigger IS the root, so it needs no separate per-turn
-	// marker; in-thread follow-ups (turns ≥ 2) get their own.
-	isRoot := tr.channelID == ls.rootChannelID && tr.messageID == ls.rootMessageID
-	s.setGlobalStatus(ctx, ls, emojiWorking)
-	if !isRoot {
-		_ = s.reply.React(ctx, tr.channelID, tr.messageID, emojiWorking)
-	}
+	isRoot := ls.isRootTurn(tr)
+	s.beginTurnStatus(ctx, ls, tr, isRoot)
 
-	// Tool activity within a turn is shown in ONE muted subtext line, refreshed to
-	// the latest tool as new tools run by deleting and reposting it (not editing in
-	// place — an edited "-#" line wraps its "(edited)" marker onto a second line).
-	// No new notification per tool, and no growing wall of Read/Bash/Grep lines. When
-	// an answer arrives the burst is finalized to a muted one-line summary ("read 2
-	// files · ran 3 commands") so the raw command doesn't linger as noise; any later
-	// tools start a fresh line.
-	var toolMsgID string
-	var toolText string
-	var lastEdit time.Time
-	var tally toolTally
-	// finalizeTools replaces the live tool message with the muted summary by
-	// DELETING it and POSTING the summary fresh, rather than editing in place. The
-	// summary is `-#` subtext, and Discord renders an edited subtext line's
-	// "(edited)" marker on a second line — so editing would wrap the one-line
-	// summary onto two. A freshly posted message is never "(edited)", keeping the
-	// muted summary on a single line. Posted silently like the live tool message.
-	finalizeTools := func() {
-		if toolMsgID == "" {
-			return
-		}
-		final := toolText
-		if sum := tally.summary(); sum != "" {
-			final = sum
-		}
-		_ = s.reply.Delete(ctx, ls.threadID, toolMsgID)
-		_, _ = s.reply.PostSilent(ctx, ls.threadID, final)
-		toolMsgID = ""
-		toolText = ""
-		tally = toolTally{}
-	}
-
-	// Assistant text is held back until the next event reveals what kind it is.
-	// A run of text (one or more consecutive blocks) immediately followed by tool
-	// activity is the agent narrating what it's about to do ("Let me explore the
-	// code…") — muted to subtext like the tool summaries, no notification. A run
-	// followed by the turn's end is the actual answer — posted normally so it
-	// notifies. The whole run shares one verdict, decided by what follows it.
-	var pending []string
-	posted := false
-	flushPending := func(asAnswer bool) {
-		for _, text := range pending {
-			if asAnswer {
-				for _, chunk := range splitMessage(text, discordMax) {
-					_, _ = s.reply.Post(ctx, ls.threadID, chunk)
-				}
-				posted = true
-			} else {
-				for _, chunk := range splitMessage(mutedText(text), discordMax) {
-					_, _ = s.reply.PostSilent(ctx, ls.threadID, chunk)
-				}
-			}
-		}
-		pending = pending[:0]
-	}
-
+	rend := newTurnRender(s, ls)
 	done := ls.driver.RunTurn(ctx, agentproc.Turn{
 		SessionRef: ls.ref(),
 		Prompt:     tr.text,
@@ -394,34 +341,9 @@ func (s *Service) runTurn(ctx context.Context, ls *liveSession, tr turnReq) {
 	}, func(e agentproc.Event) {
 		switch ev := e.(type) {
 		case agentproc.AssistantText:
-			if strings.TrimSpace(ev.Text) == "" {
-				return
-			}
-			// Text means the agent stopped using tools and is talking: finalize any
-			// open burst, then buffer this block with earlier ones in the same run.
-			finalizeTools()
-			pending = append(pending, ev.Text)
+			rend.handle(ctx, ev.Text, false)
 		case agentproc.ToolActivity:
-			if strings.TrimSpace(ev.Label) == "" {
-				return
-			}
-			// The text run that preceded this tool was narration — mute it.
-			flushPending(false)
-			tally.add(ev.Label)
-			// The live tool line is muted subtext too, matching the narration and the
-			// end-of-burst summary so the whole turn reads in one consistent style.
-			// Refresh it to the latest tool by delete + repost (never edit: an edited
-			// "-#" line wraps its "(edited)" marker), throttled so a fast burst doesn't
-			// hammer the API.
-			toolText = mutedText(toolLine(ev.Label))
-			if toolMsgID != "" && time.Since(lastEdit) < toolEditInterval {
-				return
-			}
-			if toolMsgID != "" {
-				_ = s.reply.Delete(ctx, ls.threadID, toolMsgID)
-			}
-			toolMsgID, _ = s.reply.PostSilent(ctx, ls.threadID, toolText)
-			lastEdit = time.Now()
+			rend.handle(ctx, ev.Label, true)
 		}
 	})
 
@@ -441,25 +363,7 @@ func (s *Service) runTurn(ctx context.Context, ls *liveSession, tr turnReq) {
 		// latest turn, not an earlier one.
 		s.persistRecord(ls.record())
 	}
-	finalizeTools()    // any trailing tool steps
-	flushPending(true) // the trailing text run, with no tool after it, is the answer
-
-	if !isRoot {
-		_ = s.reply.Unreact(ctx, tr.channelID, tr.messageID, emojiWorking)
-	}
-	if done.Err != nil {
-		if !isRoot {
-			_ = s.reply.React(ctx, tr.channelID, tr.messageID, emojiError)
-		}
-		s.setGlobalStatus(ctx, ls, emojiError)
-		_, _ = s.reply.Post(ctx, ls.threadID, "error: "+done.Err.Error())
-		return
-	}
-	if !posted {
-		_, _ = s.reply.Post(ctx, ls.threadID, answerOrPlaceholder(""))
-	}
-	if !isRoot {
-		_ = s.reply.React(ctx, tr.channelID, tr.messageID, emojiDone)
-	}
-	s.setGlobalStatus(ctx, ls, emojiDone)
+	rend.finalizeTools(ctx)      // any trailing tool steps
+	rend.flushPending(ctx, true) // the trailing text run, with no tool after it, is the answer
+	s.endTurnDone(ctx, ls, tr, isRoot, done.Err, rend.posted)
 }
