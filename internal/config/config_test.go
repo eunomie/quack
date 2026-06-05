@@ -188,6 +188,23 @@ func TestLoad_AllowedGuildIDs(t *testing.T) {
 	}
 }
 
+func TestOwnerAndGuestAccessors(t *testing.T) {
+	d := Discord{
+		AllowedUserID: "legacy",
+		OwnerUserIDs:  []string{"owner1"},
+		GuestRoleID:   "grole",
+		GuestRoleIDs:  []string{"grole2"},
+	}
+	owners := d.OwnerIDs()
+	if len(owners) != 2 || owners[0] != "owner1" || owners[1] != "legacy" {
+		t.Fatalf("owners = %v", owners)
+	}
+	roles := d.GuestRoles()
+	if len(roles) != 2 || roles[0] != "grole" || roles[1] != "grole2" {
+		t.Fatalf("guest roles = %v", roles)
+	}
+}
+
 func TestLoad_ScratchDirExplicit(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "config.toml")

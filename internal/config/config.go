@@ -53,6 +53,10 @@ type Discord struct {
 	AllowedChannelID         string   `toml:"allowed_channel_id"`
 	AllowedChannelIDs        []string `toml:"allowed_channel_ids"`
 	ThreadAutoArchiveMinutes int      `toml:"thread_auto_archive_minutes"`
+	OwnerUserID              string   `toml:"owner_user_id"`
+	OwnerUserIDs             []string `toml:"owner_user_ids"`
+	GuestRoleID              string   `toml:"guest_role_id"`
+	GuestRoleIDs             []string `toml:"guest_role_ids"`
 }
 
 // UserIDs, GuildIDs, and ChannelIDs return the merged allowlist for each
@@ -60,6 +64,15 @@ type Discord struct {
 func (d Discord) UserIDs() []string    { return mergeIDs(d.AllowedUserID, d.AllowedUserIDs) }
 func (d Discord) GuildIDs() []string   { return mergeIDs(d.AllowedGuildID, d.AllowedGuildIDs) }
 func (d Discord) ChannelIDs() []string { return mergeIDs(d.AllowedChannelID, d.AllowedChannelIDs) }
+
+// OwnerIDs are full-access users: the explicit owner_user_id(s) plus the legacy
+// allowed_user_id(s), so an existing single-user config keeps full access.
+func (d Discord) OwnerIDs() []string {
+	return append(mergeIDs(d.OwnerUserID, d.OwnerUserIDs), mergeIDs(d.AllowedUserID, d.AllowedUserIDs)...)
+}
+
+// GuestRoles are the Discord role ids whose members get the sandbox.
+func (d Discord) GuestRoles() []string { return mergeIDs(d.GuestRoleID, d.GuestRoleIDs) }
 
 // mergeIDs combines a singular id with a list, dropping empties.
 func mergeIDs(single string, many []string) []string {
