@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strings"
 	"syscall"
 	"time"
 
@@ -19,6 +20,7 @@ import (
 	"github.com/eunomie/quack/internal/config"
 	"github.com/eunomie/quack/internal/discord"
 	"github.com/eunomie/quack/internal/gitexec"
+	"github.com/eunomie/quack/internal/sandbox"
 	"github.com/eunomie/quack/internal/session"
 	"github.com/eunomie/quack/internal/tmuxexec"
 )
@@ -116,6 +118,26 @@ func main() {
 		if h, ok := r.(session.History); ok {
 			svc.UseHistory(h)
 		}
+		if len(cfg.Discord.GuestRoles()) > 0 {
+			prov := &sandbox.DockerProvisioner{
+				D:          sandbox.NewDocker(),
+				AgentImage: cfg.Guest.Image,
+				ProxyImage: cfg.Guest.ProxyImage,
+				DindImage:  cfg.Guest.DindImage,
+				ProxyPort:  cfg.Guest.ProxyPort,
+			}
+			svc.UseSandbox(sandbox.Adapter{P: prov}, session.GuestPolicy{
+				GitHubPAT:        cfg.Guest.GitHubPAT,
+				GitUserName:      cfg.Guest.GitUserName,
+				GitUserEmail:     cfg.Guest.GitUserEmail,
+				EgressAllow:      cfg.Guest.EgressAllow,
+				ModelMounts:      parseMounts(cfg.Guest.ModelCredMounts),
+				AllowedTools:     cfg.Guest.AllowedTools,
+				DisallowedTools:  cfg.Guest.DisallowedTools,
+				DisallowedSkills: cfg.Guest.DisallowedSkills,
+				AllowedSkills:    cfg.Guest.AllowedSkills,
+			})
+		}
 		return svc
 	})
 	if err != nil {
@@ -135,4 +157,15 @@ func main() {
 	if err := bot.Run(ctx); err != nil {
 		log.Fatalf("run: %v", err)
 	}
+}
+
+// parseMounts turns "host:container" strings into SandboxMounts, skipping malformed entries.
+func parseMounts(in []string) []session.SandboxMount {
+	out := make([]session.SandboxMount, 0, len(in))
+	for _, m := range in {
+		if i := strings.IndexByte(m, ':'); i > 0 && i < len(m)-1 {
+			out = append(out, session.SandboxMount{Host: m[:i], Container: m[i+1:]})
+		}
+	}
+	return out
 }
