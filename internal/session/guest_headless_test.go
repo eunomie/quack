@@ -44,6 +44,71 @@ func TestHeadless_GuestTurnUsesContainerLauncherAndTearsDownOnStop(t *testing.T)
 	}
 }
 
+// End-to-end: a RoleGuest command takes the guest path — it provisions a
+// sandbox (rather than the owner clone/worktree switch) and launches a tracked
+// headless session.
+func TestHandle_GuestPathProvisionsSandbox(t *testing.T) {
+	svc, g, tx, r, _ := newTestService()
+	d := &fakeDriver{turns: []scripted{{texts: []string{"on it"}, ref: "g-sess"}}}
+	svc.drivers = map[string]agentproc.Driver{"claude": d}
+	fs := &fakeSandboxer{}
+	svc.UseSandbox(fs, GuestPolicy{GitHubPAT: "PAT", GitUserName: "O", GitUserEmail: "o@e", EgressAllow: []string{"github.com"}})
+
+	svc.Handle(context.Background(), Request{
+		Content: "! owner/repo\nDo it.",
+		Origin:  baseOrigin(),
+		Role:    RoleGuest,
+	})
+	svc.waitIdle(r.threadID)
+
+	// The guest path provisions a sandbox instead of cloning/worktreeing on the host.
+	if fs.gotSpec.SessionName == "" {
+		t.Fatalf("expected Provision to be called on the guest path; sandboxer spec = %+v", fs.gotSpec)
+	}
+	if len(g.cloned) != 0 || len(g.worktrees) != 0 {
+		t.Errorf("guest path must not clone/worktree on the host: cloned=%v worktrees=%v", g.cloned, g.worktrees)
+	}
+	if len(tx.created) != 0 {
+		t.Errorf("guest is forced headless: must not launch tmux, got %v", tx.created)
+	}
+	if !svc.Tracked(r.threadID) {
+		t.Fatalf("guest session should be a tracked headless session")
+	}
+	// The turn ran through the container launcher reconstructed from the handle.
+	if len(d.seen) != 1 || d.seen[0].Launcher == nil {
+		t.Fatalf("guest turn should carry a container launcher: %+v", d.seen)
+	}
+}
+
+// PromoteThread refuses a sandboxed guest session: handing it a host tmux
+// session would break out of the jail, so it stays headless (tracked), the
+// sandbox is not torn down, and an owner-only refusal is posted.
+func TestPromoteThread_RefusesGuestSandbox(t *testing.T) {
+	d := &fakeDriver{turns: []scripted{{texts: []string{"ok"}, ref: "g-ref"}}}
+	svc, _, r, _ := newHeadlessServiceFakes(d)
+	fs := &fakeSandboxer{}
+	svc.UseSandbox(fs, GuestPolicy{GitHubPAT: "PAT", GitUserName: "O", GitUserEmail: "o@e", EgressAllow: []string{"github.com"}})
+
+	handle := &SandboxHandle{AgentContainer: "q-agent", Workdir: "/work/r", Name: "guest-sess"}
+	svc.startHeadless(context.Background(), "claude", "thread-g", "/work/r", "high", "guest-sess", "owner/repo",
+		RoleGuest, handle,
+		turnReq{channelID: "c", messageID: "m1", text: "do the thing"})
+	svc.waitIdle("thread-g")
+
+	if !svc.PromoteThread(context.Background(), "thread-g") {
+		t.Fatalf("promote should report handled")
+	}
+	if !svc.Tracked("thread-g") {
+		t.Fatalf("refused promotion must leave the guest session tracked")
+	}
+	if fs.teardowns != 0 {
+		t.Errorf("refusing promotion must not tear down the sandbox, got %d teardowns", fs.teardowns)
+	}
+	if !anyContains(r.posts, "owner-only") {
+		t.Errorf("expected an owner-only refusal message, got %v", r.posts)
+	}
+}
+
 // An owner's headless turn carries no launcher (nil => DirectLauncher in the
 // driver) and never touches the sandbox.
 func TestHeadless_OwnerTurnHasNoLauncherOrSandbox(t *testing.T) {

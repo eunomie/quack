@@ -647,3 +647,40 @@ func TestHandle_InThread_RunsInPlace(t *testing.T) {
 		t.Errorf("no rename expected in place on the no-headless path; renames = %v", r.renames)
 	}
 }
+
+func TestSuccessMessage_Owner(t *testing.T) {
+	ag := agent.Agent{Command: "claude"}
+	owner := prepResult{name: "fix", workdir: "/wt", branch: "fix", isolated: true}
+	got := successMessage(owner, "high", ag)
+
+	// Owner output is unchanged: it still carries the worktree branch and the
+	// host tmux attach line.
+	if !strings.Contains(got, "worktree branch `fix`") {
+		t.Errorf("owner message should show the worktree branch, got %q", got)
+	}
+	if !strings.Contains(got, "attach: `tmux attach -t quack/fix`") {
+		t.Errorf("owner message should keep the attach line, got %q", got)
+	}
+	if strings.Contains(got, "sandbox") {
+		t.Errorf("owner message should not mention a sandbox, got %q", got)
+	}
+}
+
+func TestSuccessMessage_GuestSandbox(t *testing.T) {
+	ag := agent.Agent{Command: "claude"}
+	guest := prepResult{name: "g", workdir: "/work/r", isolated: true,
+		sandbox: &SandboxHandle{AgentContainer: "q-agent", Workdir: "/work/r", Name: "g"}}
+	got := successMessage(guest, "high", ag)
+
+	// A guest runs in an isolated Docker sandbox: the message says so and omits
+	// the bogus tmux attach line (there is no host tmux session for a guest).
+	if !strings.Contains(got, "sandbox") {
+		t.Errorf("guest message should indicate a sandbox, got %q", got)
+	}
+	if strings.Contains(got, "tmux attach") {
+		t.Errorf("guest message must not offer a tmux attach line, got %q", got)
+	}
+	if strings.Contains(got, "worktree branch") {
+		t.Errorf("guest message should not show a host worktree branch, got %q", got)
+	}
+}

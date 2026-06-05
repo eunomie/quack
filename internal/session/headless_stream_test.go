@@ -119,7 +119,7 @@ func TestStream_FirstTurnRendersAndPersists(t *testing.T) {
 	svc, r := newStreamService(d)
 
 	svc.startHeadless(context.Background(), "claude", "thread-1", "/wt", "high", "demo", "",
-		turnReq{channelID: "c", messageID: "m1", text: "do the thing"})
+		RoleOwner, nil, turnReq{channelID: "c", messageID: "m1", text: "do the thing"})
 
 	<-d.opened
 	waitFor(t, "first send", func() bool { return sess.sentCount() == 1 })
@@ -156,7 +156,7 @@ func TestStream_MidTurnInterjection(t *testing.T) {
 	svc, r := newStreamService(d)
 
 	svc.startHeadless(context.Background(), "claude", "thread-1", "/wt", "", "demo", "",
-		turnReq{channelID: "c", messageID: "m1", text: "long task"})
+		RoleOwner, nil, turnReq{channelID: "c", messageID: "m1", text: "long task"})
 	<-d.opened
 	waitFor(t, "first send", func() bool { return sess.sentCount() == 1 })
 
@@ -197,7 +197,7 @@ func TestStream_StopClosesSession(t *testing.T) {
 	svc, _ := newStreamService(d)
 
 	svc.startHeadless(context.Background(), "claude", "thread-1", "/wt", "", "demo", "",
-		turnReq{channelID: "c", messageID: "m1", text: "go"})
+		RoleOwner, nil, turnReq{channelID: "c", messageID: "m1", text: "go"})
 	<-d.opened
 	waitFor(t, "first send", func() bool { return sess.sentCount() == 1 })
 	sess.emit(agentproc.AssistantText{Text: "hi"})

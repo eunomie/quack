@@ -227,7 +227,7 @@ func TestHeadless_InPlace_PersistsAndKeepsThreadOpen(t *testing.T) {
 	svc, _, r, fs := newHeadlessServiceFakes(d)
 
 	svc.startHeadless(context.Background(), "claude", "post1", "/wt", "high", "demo", "acme/widget",
-		turnReq{channelID: "post1", messageID: "m1", text: "go"},
+		RoleOwner, nil, turnReq{channelID: "post1", messageID: "m1", text: "go"},
 		inPlaceOpts{inPlace: true, titleBase: "Help with login"})
 	svc.waitIdle("post1")
 

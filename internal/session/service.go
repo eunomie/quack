@@ -420,7 +420,7 @@ type prepResult struct {
 
 func (s *Service) prepare(ctx context.Context, dir *command.Directive, provisional string, explicit bool, token, suggested string, role Role) (prepResult, error) {
 	if role.IsGuest() {
-		return s.prepareGuest(ctx, dir, provisional, orDefault(suggested, provisional))
+		return s.prepareGuest(ctx, dir, orDefault(suggested, provisional))
 	}
 	switch dir.Target {
 	case "":
@@ -601,6 +601,13 @@ func (s *Service) free(ctx context.Context, clonePath, name string) bool {
 func successMessage(p prepResult, effort string, ag agent.Agent) string {
 	if effort == "" {
 		effort = "(default)"
+	}
+	// A guest runs inside an isolated Docker sandbox: there is no host worktree
+	// branch and no host tmux session to attach to (PromoteThread refuses guests),
+	// so describe the workspace as a sandbox and omit the attach line.
+	if p.sandbox != nil {
+		return fmt.Sprintf("🦆 session **%s** is up\n• dir: `%s`\n• 🔒 isolated Docker sandbox\n• agent: `%s` · effort: `%s`",
+			p.name, p.workdir, ag.Command, effort)
 	}
 	iso := "worktree branch `" + p.branch + "`"
 	if !p.isolated {

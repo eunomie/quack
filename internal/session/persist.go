@@ -197,6 +197,9 @@ func (s *Service) Rehydrate(ctx context.Context) int {
 			if s.sandbox == nil {
 				continue // guest sandbox support not configured; can't restore
 			}
+			if rec.Sandbox == nil {
+				continue // guest record without a handle is unrestorable
+			}
 			if err := s.sandbox.Reattach(ctx, rec.Sandbox, s.guestReattachSpec(rec)); err != nil {
 				continue // sandbox gone (e.g. volume removed) — skip
 			}

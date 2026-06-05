@@ -37,7 +37,7 @@ func guestTargetAllowed(target string) error {
 // prepareGuest provisions an isolated Docker sandbox for a guest. A repo target
 // is cloned fresh inside the container; no target yields an empty sandbox. The
 // clone URL is HTTPS (the injected PAT authenticates; no SSH key in the jail).
-func (s *Service) prepareGuest(ctx context.Context, dir *command.Directive, provisional, name string) (prepResult, error) {
+func (s *Service) prepareGuest(ctx context.Context, dir *command.Directive, name string) (prepResult, error) {
 	spec := SandboxSpec{
 		SessionName:  name,
 		GitHubPAT:    s.guest.GitHubPAT,

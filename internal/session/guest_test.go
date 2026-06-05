@@ -55,7 +55,7 @@ func TestPrepareGuestProvisionsSandboxForRepo(t *testing.T) {
 	fs := &fakeSandboxer{}
 	s.UseSandbox(fs, GuestPolicy{GitHubPAT: "PAT", GitUserName: "O", GitUserEmail: "o@e", EgressAllow: []string{"github.com"}})
 	dir := &command.Directive{Target: "owner/repo", Prompt: "x", Base: "main"}
-	prep, err := s.prepareGuest(context.Background(), dir, "prov", "name")
+	prep, err := s.prepareGuest(context.Background(), dir, "name")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -77,7 +77,7 @@ func TestPrepareGuestEmptySandboxNoTarget(t *testing.T) {
 	s := New(Config{}, nil, nil, nil)
 	fs := &fakeSandboxer{}
 	s.UseSandbox(fs, GuestPolicy{})
-	prep, err := s.prepareGuest(context.Background(), &command.Directive{Prompt: "hi"}, "prov", "name")
+	prep, err := s.prepareGuest(context.Background(), &command.Directive{Prompt: "hi"}, "name")
 	if err != nil {
 		t.Fatal(err)
 	}
