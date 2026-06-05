@@ -112,6 +112,7 @@ func (d Claude) SuggestName(ctx context.Context, prompt string) (string, error) 
 
 type claudeLine struct {
 	Type      string `json:"type"`
+	Subtype   string `json:"subtype"`
 	SessionID string `json:"session_id"`
 	Message   struct {
 		Content []struct {
