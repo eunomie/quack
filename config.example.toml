@@ -19,15 +19,26 @@ name_agent     = "claude"     # agent used to auto-name sessions (best summarize
 
 [discord]
 # token = "..." # prefer DISCORD_BOT_TOKEN env instead
-# Each allowlist dimension restricts who/where the bot answers; an empty
-# (omitted) dimension means "any". Use the singular form for one id or the
-# plural list to permit several. Both forms are merged if you set both.
-# A message is authorized only if it passes every set dimension (user AND
-# guild AND channel).
-allowed_user_id   = "YOUR_DISCORD_USER_ID"
-# allowed_user_ids  = ["USER_ID_1", "USER_ID_2"]
+# Two trust levels (see the [guest] block below and
+# hack/designs/2026-06-05-multi-user-sandbox-hardening.md):
+#
+#   OWNER  — full host access, exactly the original behavior. Identified by an
+#            explicit user id (owner_user_id(s)). The legacy allowed_user_id(s)
+#            also count as owners, so an existing single-user config is unchanged.
+#   GUEST  — confined to a per-session Docker sandbox (forced headless, repo
+#            targets only, allow-listed egress, can only touch their own
+#            sessions). Identified by holding a configured Discord role
+#            (guest_role_id(s)), within an allowed guild/channel.
+#
+# A user who is neither an owner nor a guest-role holder is rejected. An empty
+# owner list does NOT mean "any user" — owners must be listed explicitly.
+allowed_user_id   = "YOUR_DISCORD_USER_ID"   # legacy: still treated as an OWNER
+# owner_user_id   = "YOUR_DISCORD_USER_ID"   # full-access owner(s)
+# owner_user_ids  = ["OWNER_1", "OWNER_2"]
 allowed_guild_ids = ["YOUR_GUILD_ID", "ANOTHER_GUILD_ID"]
 # allowed_channel_ids = ["OPTIONAL_CHANNEL_ID"]
+# guest_role_id   = "GUEST_ROLE_ID"          # members of this role -> sandboxed guests
+# guest_role_ids  = ["GUEST_ROLE_1", "GUEST_ROLE_2"]  # (sandbox is inert unless set)
 thread_auto_archive_minutes = 10080 # Discord allows only 60, 1440, 4320, or 10080 (7 days)
 
 [agents.claude]
@@ -70,3 +81,34 @@ headless        = true
 # [[fast_commands]]
 # trigger = "/open-zed"
 # argv    = ["/home/you/.claude/skills/open-zed/open-zed.sh"]
+
+# Guest sandbox. Consulted ONLY for guest sessions, and the whole feature stays
+# inert unless [discord].guest_role_id(s) is also set. Guests run inside a
+# per-session Docker sandbox: an unprivileged agent container (the clone + the
+# creds below) plus a privileged docker:dind sidecar, on a private network whose
+# only egress is the allow-listed proxy. Build the images first (see
+# hack/sandbox/README.md): `docker build -t quack-sandbox:latest hack/sandbox`
+# and `docker build -t quack-egress:latest hack/sandbox/proxy`.
+# [guest]
+# image          = "quack-sandbox:latest"   # agent container image
+# proxy_image    = "quack-egress:latest"    # egress allow-list proxy image
+# dind_image     = "docker:dind"            # docker-in-docker sidecar
+# proxy_port     = "8888"
+# Push credential: a FINE-GRAINED, revocable GitHub PAT (HTTPS; no SSH key ever
+# enters the sandbox). Prefer the QUACK_GUEST_GITHUB_PAT env var over the file.
+# github_pat     = "github_pat_..."
+# git_user_name  = "Your Name"              # commit identity guests share
+# git_user_email = "you@example.com"
+# Network egress allow-list for the agent container (model API + GitHub). The
+# default already covers Anthropic/OpenAI/GitHub; override to tighten/extend.
+# egress_allow   = ["api.anthropic.com", "api.openai.com", "github.com", "api.github.com", "codeload.github.com"]
+# Minimal model credentials, mounted read-only as "host:container" (the single
+# auth file per agent — NOT the whole ~/.claude/~/.codex). Confirm exact paths
+# for your install (host-verification spike P1).
+# model_cred_mounts = ["/home/you/.codex/auth.json:/root/.codex/auth.json", "/home/you/.claude/.credentials.json:/root/.claude/.credentials.json"]
+# Tool/skill limits applied to guests (claude only; codex has no skills). Block
+# host-escaping skills, allow safe ones. Matched as Skill(<name>).
+# disallowed_skills = ["open-zed"]
+# allowed_skills    = ["revue"]
+# allowed_tools     = ""                    # optional extra claude --allowedTools
+# disallowed_tools  = ""                    # optional extra claude --disallowedTools

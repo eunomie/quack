@@ -222,6 +222,45 @@ independently; the record just carries the token that points back into it.
 An in-flight turn at restart time is lost (its child process was killed); the
 session itself still resumes on the next message.
 
+## Access control & guest sandboxes
+
+quack has two trust levels, resolved per Discord user in `internal/discord`
+(`resolveRole`) and carried as a `session.Role` on each `Request`:
+
+- **Owner** — full host access, exactly the original behavior. Identified by an
+  explicit `owner_user_id(s)`; the legacy `allowed_user_id(s)` also count as
+  owners (so an existing single-user config is unchanged). An empty owner list
+  does **not** mean "any user".
+- **Guest** — identified by holding a configured `guest_role_id`, within an
+  allowed guild/channel. Every guest session is confined to a **per-session
+  Docker sandbox** and guests may only feed/stop **their own** sessions
+  (`liveSession.canModify`), never promote to a host tmux.
+
+The sandbox (`internal/sandbox`, behind the consumer-side `session.Sandboxer`
+interface, wired in `main.go` only when `guest_role_ids` is set) is two
+containers on a private per-session network: an **unprivileged agent container**
+(holds a fresh clone + minimal injected creds; the agent's turns run via
+`docker exec` into it — the `agentproc.Launcher` seam) and a **`docker:dind`
+sidecar** (privileged; gives guests real Docker without exposing the host
+socket). The agent container sits on an `--internal` network with no direct
+egress — its only route out is an allow-listing proxy (`hack/sandbox/proxy`),
+restricting it to the model API + GitHub. Guests are forced headless, may target
+only a repo ref (cloned fresh inside the jail) or nothing (empty sandbox) — never
+a host path, `temp-dir`, or `no-wt` (`clampGuestDirective`/`guestTargetAllowed`).
+Guest tools are restricted (claude `--disallowedTools`, e.g. block `open-zed`,
+allow `revue`); codex has no skills. Persisted guest records carry the
+**non-secret** `SandboxHandle` only — the PAT is re-sourced from config on
+`Reattach`, never written to `session.json`.
+
+**Threat model (`hack/designs/2026-06-05-multi-user-sandbox-hardening.md`):** the
+sandbox protects the **host and the owner's other data** — a guest agent can't
+read the owner's SSH keys, other repos, or the quack config. It does **not** make
+the deliberately-shared credentials (model auth, a fine-grained GitHub PAT)
+unreachable; those are contained by being **scoped and revocable**, not
+unreachable. The dind sidecar is privileged — the accepted residual host-boundary
+risk (chosen over Sysbox, unsupported on Fedora). Build the images first (see
+`hack/sandbox/README.md`).
+
 ## Config
 
 TOML at `~/.config/quack/config.toml` (`internal/config`, loaded by `main.go`).
