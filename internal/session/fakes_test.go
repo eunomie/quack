@@ -182,6 +182,21 @@ func (m *memFS) readFile(path string) ([]byte, error) {
 	return nil, fmt.Errorf("not found: %s", path)
 }
 
+type fakeRunner struct {
+	dir  string
+	argv []string
+	out  []byte
+	err  error
+	runs int
+}
+
+func (f *fakeRunner) Run(ctx context.Context, dir string, argv []string) ([]byte, error) {
+	f.runs++
+	f.dir = dir
+	f.argv = argv
+	return f.out, f.err
+}
+
 // readDir returns the immediate subdirectory names under path (those that hold
 // at least one file), sorted for deterministic test ordering.
 func (m *memFS) readDir(path string) ([]string, error) {

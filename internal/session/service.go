@@ -108,6 +108,9 @@ type Config struct {
 	ThreadAutoArchiveMin int
 	AskTimeout           time.Duration // how long an ask_user waits for the owner (0 => default)
 	Agents               map[string]agent.Agent
+	// FastCommands are trigger→argv launchers run directly (bypassing the agent)
+	// when their trigger is the first word of a tracked-thread message.
+	FastCommands []FastCommand
 }
 
 // Request is one parsed-but-unprocessed Discord command.
@@ -150,6 +153,8 @@ type Service struct {
 	// askByToken resolves an ask_user MCP call (which carries only a per-session
 	// token) back to its session. Guarded by hmu alongside sessions.
 	askByToken map[string]*liveSession
+
+	runner Runner
 }
 
 // New builds a Service with real filesystem writers.
