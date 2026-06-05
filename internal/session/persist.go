@@ -32,6 +32,13 @@ type sessionRecord struct {
 	RootMessageID string `json:"root_message_id"`
 	SessionRef    string `json:"session_ref"`
 	AskToken      string `json:"ask_token,omitempty"` // routes ask_user MCP calls back to this session
+
+	// Guest-session sandbox. Role distinguishes guest from owner across a restart;
+	// Sandbox holds only non-secret container/volume identifiers (the PAT and
+	// other secrets are re-sourced from current GuestPolicy at rehydrate, never
+	// persisted here). Both empty/nil for owner sessions.
+	Role    Role           `json:"role"`
+	Sandbox *SandboxHandle `json:"sandbox,omitempty"`
 }
 
 // record snapshots the session's durable state. The non-ref fields are set once
@@ -52,6 +59,8 @@ func (ls *liveSession) record() sessionRecord {
 		RootMessageID: ls.rootMessageID,
 		SessionRef:    ls.sessionRef,
 		AskToken:      ls.askToken,
+		Role:          ls.role,
+		Sandbox:       ls.sandbox,
 	}
 }
 
@@ -112,12 +121,20 @@ func (s *Service) newSession(ctx context.Context, rec sessionRecord) *liveSessio
 		sessionRef:    rec.SessionRef,
 		rootChannelID: rec.RootChannelID,
 		rootMessageID: rec.RootMessageID,
+		role:          rec.Role,
 
 		queue:  make(chan turnReq, 32),
 		done:   make(chan struct{}),
 		stop:   make(chan struct{}),
 		cancel: cancel,
 		title:  newTitleUpdater(s.reply, rec.ThreadID, titleName, titleLabel),
+	}
+	// A guest record carries a sandbox handle: reconstruct the container launcher
+	// so the session's turns run inside the box. This is the single seam shared by
+	// the fresh-start (startHeadless) and rehydrate paths.
+	if rec.Sandbox != nil {
+		ls.sandbox = rec.Sandbox
+		ls.launcher = s.sandbox.Launcher(rec.Sandbox)
 	}
 
 	s.hmu.Lock()

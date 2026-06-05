@@ -34,7 +34,7 @@ func TestHeadless_PersistsRecordWithSessionRef(t *testing.T) {
 	svc, _, _, fs := newHeadlessServiceFakes(d)
 
 	svc.startHeadless(context.Background(), "claude", "thread-1", "/wt", "high", "demo", "acme/widget",
-		turnReq{channelID: "c", messageID: "m1", text: "go"})
+		RoleOwner, nil, turnReq{channelID: "c", messageID: "m1", text: "go"})
 	svc.waitIdle("thread-1")
 
 	rec, ok := readRecord(t, fs, "demo")
@@ -61,7 +61,7 @@ func TestHeadless_StopRemovesRecord(t *testing.T) {
 	svc, _, _, fs := newHeadlessServiceFakes(d)
 
 	svc.startHeadless(context.Background(), "claude", "thread-1", "/wt", "", "demo", "",
-		turnReq{channelID: "c", messageID: "m1", text: "go"})
+		RoleOwner, nil, turnReq{channelID: "c", messageID: "m1", text: "go"})
 	svc.waitIdle("thread-1")
 	if _, ok := readRecord(t, fs, "demo"); !ok {
 		t.Fatalf("record should exist before stop")
@@ -81,7 +81,7 @@ func TestHeadless_PromoteRemovesRecord(t *testing.T) {
 	}
 
 	svc.startHeadless(context.Background(), "claude", "thread-1", "/wt", "", "demo", "",
-		turnReq{channelID: "c", messageID: "m1", text: "go"})
+		RoleOwner, nil, turnReq{channelID: "c", messageID: "m1", text: "go"})
 	svc.waitIdle("thread-1")
 	if _, ok := readRecord(t, fs, "demo"); !ok {
 		t.Fatalf("record should exist before promote")

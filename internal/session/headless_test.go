@@ -85,7 +85,7 @@ func TestHeadless_FirstTurnAndResume(t *testing.T) {
 	svc, r := newHeadlessService(d)
 
 	svc.startHeadless(context.Background(), "claude", "thread-1", "/wt", "high", "sess-1", "",
-		turnReq{channelID: "c", messageID: "m1", text: "<quack-context>...</quack-context>\n\nDo the thing."})
+		RoleOwner, nil, turnReq{channelID: "c", messageID: "m1", text: "<quack-context>...</quack-context>\n\nDo the thing."})
 	svc.waitIdle("thread-1")
 
 	if len(d.seen) != 1 || d.seen[0].SessionRef != "" || d.seen[0].Workdir != "/wt" {
@@ -114,7 +114,7 @@ func TestHeadless_FirstTurnAndResume(t *testing.T) {
 func TestHeadless_StopEndsSession(t *testing.T) {
 	d := &fakeDriver{turns: []scripted{{texts: []string{"ok"}, ref: "s"}}}
 	svc, r := newHeadlessService(d)
-	svc.startHeadless(context.Background(), "claude", "thread-2", "/wt", "", "sess-2", "", turnReq{channelID: "c", messageID: "m2", text: "go"})
+	svc.startHeadless(context.Background(), "claude", "thread-2", "/wt", "", "sess-2", "", RoleOwner, nil, turnReq{channelID: "c", messageID: "m2", text: "go"})
 	svc.waitIdle("thread-2")
 	if !svc.StopThread(context.Background(), "thread-2") {
 		t.Fatalf("stop should report it ended a tracked session")
@@ -134,7 +134,7 @@ func TestHeadless_StopEndsSession(t *testing.T) {
 func TestHeadless_StopByMessageInThread(t *testing.T) {
 	d := &fakeDriver{turns: []scripted{{texts: []string{"ok"}, ref: "s"}}}
 	svc, _ := newHeadlessService(d)
-	svc.startHeadless(context.Background(), "claude", "thread-2", "/wt", "", "sess-2", "", turnReq{channelID: "c", messageID: "m2", text: "go"})
+	svc.startHeadless(context.Background(), "claude", "thread-2", "/wt", "", "sess-2", "", RoleOwner, nil, turnReq{channelID: "c", messageID: "m2", text: "go"})
 	svc.waitIdle("thread-2")
 	if !svc.StopByMessage(context.Background(), "thread-2", "any-thread-msg") {
 		t.Fatalf("reaction in the thread should stop the session")
@@ -149,7 +149,7 @@ func TestHeadless_StopByMessageInThread(t *testing.T) {
 func TestHeadless_StopByMessageOnRoot(t *testing.T) {
 	d := &fakeDriver{turns: []scripted{{texts: []string{"ok"}, ref: "s"}}}
 	svc, _ := newHeadlessService(d)
-	svc.startHeadless(context.Background(), "claude", "thread-2", "/wt", "", "sess-2", "", turnReq{channelID: "c", messageID: "m2", text: "go"})
+	svc.startHeadless(context.Background(), "claude", "thread-2", "/wt", "", "sess-2", "", RoleOwner, nil, turnReq{channelID: "c", messageID: "m2", text: "go"})
 	svc.waitIdle("thread-2")
 	// Wrong message id in the right channel must not match.
 	if svc.StopByMessage(context.Background(), "c", "other") {
@@ -167,7 +167,7 @@ func TestHeadless_StopByMessageOnRoot(t *testing.T) {
 func TestHeadless_StopByMessageNoMatch(t *testing.T) {
 	d := &fakeDriver{turns: []scripted{{texts: []string{"ok"}, ref: "s"}}}
 	svc, _ := newHeadlessService(d)
-	svc.startHeadless(context.Background(), "claude", "thread-2", "/wt", "", "sess-2", "", turnReq{channelID: "c", messageID: "m2", text: "go"})
+	svc.startHeadless(context.Background(), "claude", "thread-2", "/wt", "", "sess-2", "", RoleOwner, nil, turnReq{channelID: "c", messageID: "m2", text: "go"})
 	svc.waitIdle("thread-2")
 	if svc.StopByMessage(context.Background(), "elsewhere", "nope") {
 		t.Fatalf("unrelated reaction should not stop any session")
@@ -180,7 +180,7 @@ func TestHeadless_StopByMessageNoMatch(t *testing.T) {
 func TestHeadless_StopMarksRootMessageStopped(t *testing.T) {
 	d := &fakeDriver{turns: []scripted{{texts: []string{"ok"}, ref: "s"}}}
 	svc, r := newHeadlessService(d)
-	svc.startHeadless(context.Background(), "claude", "thread-2", "/wt", "", "sess-2", "", turnReq{channelID: "c", messageID: "m2", text: "go"})
+	svc.startHeadless(context.Background(), "claude", "thread-2", "/wt", "", "sess-2", "", RoleOwner, nil, turnReq{channelID: "c", messageID: "m2", text: "go"})
 	svc.waitIdle("thread-2")
 
 	if !svc.StopThread(context.Background(), "thread-2") {
@@ -201,7 +201,7 @@ func TestHeadless_StopMarksRootMessageStopped(t *testing.T) {
 func TestHeadless_ErrorKeepsSessionOpen(t *testing.T) {
 	d := &fakeDriver{turns: []scripted{{err: errors.New("try again"), ref: "s"}}}
 	svc, r := newHeadlessService(d)
-	svc.startHeadless(context.Background(), "claude", "thread-3", "/wt", "", "sess-3", "", turnReq{channelID: "c", messageID: "m3", text: "go"})
+	svc.startHeadless(context.Background(), "claude", "thread-3", "/wt", "", "sess-3", "", RoleOwner, nil, turnReq{channelID: "c", messageID: "m3", text: "go"})
 	svc.waitIdle("thread-3")
 	if !svc.Tracked("thread-3") {
 		t.Fatalf("session should stay tracked after turn error")
@@ -224,7 +224,7 @@ func TestHeadless_SegmentPosting(t *testing.T) {
 	svc, r := newHeadlessService(d)
 
 	svc.startHeadless(context.Background(), "claude", "t", "/wt", "", "n", "",
-		turnReq{channelID: "c", messageID: "m", text: "go"})
+		RoleOwner, nil, turnReq{channelID: "c", messageID: "m", text: "go"})
 	svc.waitIdle("t")
 
 	// Live tool message + reposted summary + each text segment as its own message.
@@ -264,7 +264,7 @@ func TestHeadless_ToolBurstFinalizedAsRepostedSummary(t *testing.T) {
 	svc, r := newHeadlessService(d)
 
 	svc.startHeadless(context.Background(), "claude", "t", "/wt", "", "n", "",
-		turnReq{channelID: "c", messageID: "m", text: "go"})
+		RoleOwner, nil, turnReq{channelID: "c", messageID: "m", text: "go"})
 	svc.waitIdle("t")
 
 	// Three Reads collapse to ONE live tool message (not a message per tool); on
@@ -335,7 +335,7 @@ func TestHeadless_NarrationMutedAnswerNotifies(t *testing.T) {
 	svc, r := newHeadlessService(d)
 
 	svc.startHeadless(context.Background(), "claude", "t", "/wt", "", "n", "",
-		turnReq{channelID: "c", messageID: "m", text: "go"})
+		RoleOwner, nil, turnReq{channelID: "c", messageID: "m", text: "go"})
 	svc.waitIdle("t")
 
 	find := func(sub string) *postedMsg {
@@ -380,7 +380,7 @@ func TestHeadless_ThreadTitleStatusIcon(t *testing.T) {
 	svc, r := newHeadlessService(d)
 
 	svc.startHeadless(context.Background(), "claude", "thread-1", "/wt", "", "demo", "acme/widget",
-		turnReq{channelID: "c", messageID: "m1", text: "go"})
+		RoleOwner, nil, turnReq{channelID: "c", messageID: "m1", text: "go"})
 	svc.waitIdle("thread-1")
 
 	ls := svc.sessions["thread-1"]
@@ -405,7 +405,7 @@ func TestHeadless_GlobalStatusTracksLatestTurn(t *testing.T) {
 	svc, r := newHeadlessService(d)
 
 	svc.startHeadless(context.Background(), "claude", "thread-1", "/wt", "", "demo", "",
-		turnReq{channelID: "c", messageID: "m1", text: "go"})
+		RoleOwner, nil, turnReq{channelID: "c", messageID: "m1", text: "go"})
 	svc.waitIdle("thread-1")
 
 	if !svc.FeedThread(context.Background(), "thread-1", "thread-1", "m2", "again", nil) {

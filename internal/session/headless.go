@@ -47,6 +47,14 @@ type liveSession struct {
 	askMu   sync.Mutex
 	pending *pendingAsk
 
+	// Guest-session sandbox. launcher routes each turn's child process into the
+	// container (nil for owners ⇒ the driver uses DirectLauncher); sandbox is the
+	// handle torn down on stop; role distinguishes guest from owner. All set once
+	// at construction.
+	role     Role
+	launcher agentproc.Launcher
+	sandbox  *SandboxHandle
+
 	// Root (triggering) message + the status emoji currently shown on it. The
 	// global status tracks the latest turn so the channel view stays current.
 	// Touched only by the single runLoop goroutine.
@@ -78,7 +86,7 @@ func (s *Service) UseHistory(h History) { s.history = h }
 // UseSandbox wires in the sandbox adapter and guest policy for guest sessions.
 func (s *Service) UseSandbox(sb Sandboxer, g GuestPolicy) { s.sandbox = sb; s.guest = g }
 
-func (s *Service) startHeadless(ctx context.Context, agentName, threadID, workdir, effort, name, label string, first turnReq, opts ...inPlaceOpts) {
+func (s *Service) startHeadless(ctx context.Context, agentName, threadID, workdir, effort, name, label string, role Role, handle *SandboxHandle, first turnReq, opts ...inPlaceOpts) {
 	var ip inPlaceOpts
 	if len(opts) > 0 {
 		ip = opts[0]
@@ -94,6 +102,8 @@ func (s *Service) startHeadless(ctx context.Context, agentName, threadID, workdi
 		ThreadID:      threadID,
 		RootChannelID: first.channelID,
 		RootMessageID: first.messageID,
+		Role:          role,
+		Sandbox:       handle,
 	})
 	// Persist immediately (with an empty ref) so a restart before the first turn
 	// completes still keeps the thread tracked; the ref is filled in per turn.
@@ -142,6 +152,11 @@ func (s *Service) StopThread(ctx context.Context, threadID string) bool {
 	// bounded (close() cancels any in-flight turn, killing the agent child).
 	<-ls.done
 	s.removeRecord(ls.name)
+	// A guest session owns a container set: tear it down on stop. Best-effort —
+	// a teardown failure must not block closing the thread.
+	if ls.sandbox != nil {
+		_ = s.sandbox.Teardown(ctx, ls.sandbox)
+	}
 	// Mark the session stopped on the root (triggering) message so the channel view
 	// makes clear it's no longer running, replacing whatever status it last carried.
 	s.markGlobalStopped(ctx, ls)
@@ -193,6 +208,13 @@ func (s *Service) PromoteThread(ctx context.Context, threadID string) bool {
 	s.hmu.Unlock()
 	if !ok {
 		return false
+	}
+
+	// A guest session is confined to its sandbox: promoting would hand it a host
+	// tmux session outside the jail, so it stays headless.
+	if ls.sandbox != nil {
+		_, _ = s.reply.Post(ctx, threadID, "🔒 promotion to a local tmux session is owner-only for sandboxed sessions")
+		return true
 	}
 
 	ref := ls.ref()
@@ -353,6 +375,7 @@ func (s *Service) runTurn(ctx context.Context, ls *liveSession, tr turnReq) {
 		Workdir:    ls.workdir,
 		Effort:     ls.effort,
 		Name:       ls.name,
+		Launcher:   ls.launcher, // nil for owners ⇒ DirectLauncher in the driver
 	}, func(e agentproc.Event) {
 		switch ev := e.(type) {
 		case agentproc.AssistantText:

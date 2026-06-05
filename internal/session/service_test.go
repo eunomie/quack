@@ -536,7 +536,7 @@ func TestPromoteThread(t *testing.T) {
 	svc.drivers = map[string]agentproc.Driver{"claude": d}
 
 	svc.startHeadless(context.Background(), "claude", "thread-9", "/wt", "xhigh", "dagger-main-tok", "",
-		turnReq{channelID: "c", messageID: "m", text: "go"})
+		RoleOwner, nil, turnReq{channelID: "c", messageID: "m", text: "go"})
 	svc.waitIdle("thread-9") // first turn done -> sessionRef captured
 
 	if !svc.PromoteThread(context.Background(), "thread-9") {
@@ -567,7 +567,7 @@ func TestPromoteThread_NotReady(t *testing.T) {
 	svc.drivers = map[string]agentproc.Driver{"claude": d}
 
 	svc.startHeadless(context.Background(), "claude", "thread-10", "/wt", "", "n", "",
-		turnReq{channelID: "c", messageID: "m", text: "go"})
+		RoleOwner, nil, turnReq{channelID: "c", messageID: "m", text: "go"})
 	svc.waitIdle("thread-10")
 
 	if !svc.PromoteThread(context.Background(), "thread-10") {
