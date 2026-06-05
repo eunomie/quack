@@ -39,6 +39,7 @@ type liveSession struct {
 	inPlace    bool   // session runs in a user-owned thread; don't archive on stop
 	threadID   string
 	askToken   string // routes ask_user MCP calls back to this session
+	authorID   string // Discord id of the user who started the session (own-session-only gate for guests)
 	sessionRef string // guarded by mu (read by PromoteThread from another goroutine)
 
 	// pending is the in-flight owner question (ask_user), if any. It is set by the
@@ -77,6 +78,22 @@ type liveSession struct {
 	closed bool
 }
 
+// Caller is the identity + trust level of whoever is trying to act on a session
+// (feed/stop). Guests may only act on sessions they started; owners on any.
+type Caller struct {
+	Role   Role
+	UserID string
+}
+
+// canModify reports whether caller may feed/stop this session. Owners: always.
+// Guests: only their own session.
+func (ls *liveSession) canModify(caller Caller) bool {
+	if caller.Role.IsGuest() {
+		return ls.authorID == caller.UserID
+	}
+	return true
+}
+
 // UseDrivers registers the headless agent drivers, keyed by agent name.
 func (s *Service) UseDrivers(d map[string]agentproc.Driver) { s.drivers = d }
 
@@ -86,7 +103,7 @@ func (s *Service) UseHistory(h History) { s.history = h }
 // UseSandbox wires in the sandbox adapter and guest policy for guest sessions.
 func (s *Service) UseSandbox(sb Sandboxer, g GuestPolicy) { s.sandbox = sb; s.guest = g }
 
-func (s *Service) startHeadless(ctx context.Context, agentName, threadID, workdir, effort, name, label string, role Role, handle *SandboxHandle, first turnReq, opts ...inPlaceOpts) {
+func (s *Service) startHeadless(ctx context.Context, agentName, threadID, workdir, effort, name, label string, role Role, handle *SandboxHandle, authorID string, first turnReq, opts ...inPlaceOpts) {
 	var ip inPlaceOpts
 	if len(opts) > 0 {
 		ip = opts[0]
@@ -104,6 +121,7 @@ func (s *Service) startHeadless(ctx context.Context, agentName, threadID, workdi
 		RootMessageID: first.messageID,
 		Role:          role,
 		Sandbox:       handle,
+		AuthorID:      authorID,
 	})
 	// Persist immediately (with an empty ref) so a restart before the first turn
 	// completes still keeps the thread tracked; the ref is filled in per turn.
@@ -115,11 +133,16 @@ func (s *Service) startHeadless(ctx context.Context, agentName, threadID, workdi
 // the user's message, for status reactions). Any attachments are mirrored to the
 // session state dir and referenced in the turn text. Returns false if not a
 // tracked thread.
-func (s *Service) FeedThread(ctx context.Context, threadID, channelID, messageID, text string, atts []Attachment) bool {
+func (s *Service) FeedThread(ctx context.Context, threadID, channelID, messageID, text string, atts []Attachment, caller Caller) bool {
 	s.hmu.Lock()
 	ls, ok := s.sessions[threadID]
 	s.hmu.Unlock()
 	if !ok {
+		return false
+	}
+	// Own-session-only: a guest may feed only the session it started; silently
+	// ignore an attempt to feed someone else's. Owners always pass.
+	if !ls.canModify(caller) {
 		return false
 	}
 	if block := s.saveAttachments(ctx, ls.name, atts); block != "" {
@@ -132,10 +155,17 @@ func (s *Service) FeedThread(ctx context.Context, threadID, channelID, messageID
 	return ls.enqueue(turnReq{channelID: channelID, messageID: messageID, text: text})
 }
 
-// StopThread ends a tracked session. Returns false if not tracked.
-func (s *Service) StopThread(ctx context.Context, threadID string) bool {
+// StopThread ends a tracked session. Returns false if not tracked, or if the
+// caller is a guest acting on a session it didn't start (own-session-only).
+func (s *Service) StopThread(ctx context.Context, threadID string, caller Caller) bool {
 	s.hmu.Lock()
 	ls, ok := s.sessions[threadID]
+	// Check the guard BEFORE removing it from the map: a guest's /stop on someone
+	// else's session must be a no-op that leaves the session tracked.
+	if ok && !ls.canModify(caller) {
+		s.hmu.Unlock()
+		return false
+	}
 	if ok {
 		delete(s.sessions, threadID)
 		delete(s.askByToken, ls.askToken)
@@ -177,7 +207,7 @@ func (s *Service) StopThread(ctx context.Context, threadID string) bool {
 // no session matches. Lets a stop reaction halt a run from either surface — the
 // thread where the agent streams, or the channel view where the root message
 // carries the status emoji.
-func (s *Service) StopByMessage(ctx context.Context, channelID, messageID string) bool {
+func (s *Service) StopByMessage(ctx context.Context, channelID, messageID string, caller Caller) bool {
 	s.hmu.Lock()
 	threadID := ""
 	if _, ok := s.sessions[channelID]; ok {
@@ -196,7 +226,7 @@ func (s *Service) StopByMessage(ctx context.Context, channelID, messageID string
 	if threadID == "" {
 		return false
 	}
-	return s.StopThread(ctx, threadID)
+	return s.StopThread(ctx, threadID, caller)
 }
 
 // PromoteThread converts a headless session into an attachable tmux session,

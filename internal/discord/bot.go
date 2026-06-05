@@ -68,19 +68,26 @@ func (b *Bot) onMessage(s *discordgo.Session, m *discordgo.MessageCreate) {
 		return
 	}
 	if b.svc.Tracked(m.ChannelID) {
-		if !b.authorizedThread(m) {
+		role, ok := b.resolveRole(m.Author.ID, m.GuildID, m.ChannelID, memberRoleIDs(m.Member))
+		if !ok {
 			return
 		}
+		caller := session.Caller{Role: role, UserID: m.Author.ID}
 		content := strings.TrimSpace(m.Content)
 		atts := toAttachments(m.Attachments)
 		if content == "" && len(atts) == 0 {
 			return
 		}
 		if content == "/stop" || strings.HasPrefix(content, "/stop ") {
-			b.svc.StopThread(context.Background(), m.ChannelID)
+			b.svc.StopThread(context.Background(), m.ChannelID, caller)
 			return
 		}
 		if content == "/attach" || strings.HasPrefix(content, "/attach ") {
+			// Promotion hands a session a host tmux outside any sandbox jail, so it
+			// is owner-only — a guest must never trigger it, even on an owner's session.
+			if role == session.RoleGuest {
+				return
+			}
 			b.svc.PromoteThread(context.Background(), m.ChannelID)
 			return
 		}
@@ -97,7 +104,7 @@ func (b *Bot) onMessage(s *discordgo.Session, m *discordgo.MessageCreate) {
 		if content != "" && b.svc.AnswerAskText(m.ChannelID, content) {
 			return
 		}
-		b.svc.FeedThread(context.Background(), m.ChannelID, m.ChannelID, m.ID, content, atts)
+		b.svc.FeedThread(context.Background(), m.ChannelID, m.ChannelID, m.ID, content, atts, caller)
 		return
 	}
 
@@ -194,16 +201,42 @@ func (b *Bot) onReaction(s *discordgo.Session, r *discordgo.MessageReactionAdd) 
 	if s.State == nil || s.State.User == nil || r.UserID == s.State.User.ID {
 		return
 	}
-	if !b.authorizedReaction(r.GuildID, r.UserID) {
+	// Resolve the reactor's trust level so the own-session guard applies: a guest
+	// may stop only its own session, an owner any. r.Member carries the reactor's
+	// roles on guild reactions; if absent, fall back to a member lookup.
+	role, ok := b.resolveRole(r.UserID, r.GuildID, r.ChannelID, reactorRoleIDs(s, r))
+	if !ok {
 		return
 	}
+	caller := session.Caller{Role: role, UserID: r.UserID}
 	if isStopReaction(r.Emoji) {
-		b.svc.StopByMessage(context.Background(), r.ChannelID, r.MessageID)
+		b.svc.StopByMessage(context.Background(), r.ChannelID, r.MessageID, caller)
 		return
 	}
 	// A number reaction on a pending ask_user question is the owner's answer. A
 	// reaction always lands inside the thread, whose id is the session key.
 	b.svc.AnswerAskReaction(r.ChannelID, r.MessageID, r.Emoji.Name)
+}
+
+// reactorRoleIDs returns the reacting user's guild role ids. The reaction event
+// usually inlines them on r.Member; when it doesn't (e.g. an uncached member),
+// fall back to a state/REST member lookup — mirroring resolveBotRoles. Returns
+// nil on any failure, leaving role resolution to reject if a guest role was
+// required.
+func reactorRoleIDs(s *discordgo.Session, r *discordgo.MessageReactionAdd) []string {
+	if r.Member != nil {
+		return r.Member.Roles
+	}
+	if r.GuildID == "" {
+		return nil
+	}
+	member, err := s.State.Member(r.GuildID, r.UserID)
+	if err != nil {
+		if member, err = s.GuildMember(r.GuildID, r.UserID); err != nil {
+			return nil
+		}
+	}
+	return member.Roles
 }
 
 // isStopReaction reports whether a reaction should halt a session: the unicode
@@ -223,7 +256,9 @@ func (b *Bot) onThreadUpdate(s *discordgo.Session, t *discordgo.ThreadUpdate) {
 		return
 	}
 	if b.svc.Tracked(t.ID) {
-		b.svc.StopThread(context.Background(), t.ID)
+		// Archiving is an unconditional stop, not a user action against a specific
+		// session, so it runs as an owner caller and bypasses the own-session guard.
+		b.svc.StopThread(context.Background(), t.ID, session.Caller{Role: session.RoleOwner})
 	}
 }
 
@@ -257,26 +292,6 @@ func memberRoleIDs(m *discordgo.Member) []string {
 	return m.Roles
 }
 
-func (b *Bot) authorized(m *discordgo.MessageCreate) bool {
-	return allows(b.allowed.UserIDs, m.Author.ID) &&
-		allows(b.allowed.GuildIDs, m.GuildID) &&
-		allows(b.allowed.ChannelIDs, m.ChannelID)
-}
-
-func (b *Bot) authorizedThread(m *discordgo.MessageCreate) bool {
-	return allows(b.allowed.UserIDs, m.Author.ID) &&
-		allows(b.allowed.GuildIDs, m.GuildID)
-}
-
-// authorizedReaction gates a stop reaction. Like authorizedThread it ignores
-// the channel restriction: a reaction lands inside a thread (or on a root
-// message whose session was already authorized at creation), so user+guild are
-// the meaningful dimensions.
-func (b *Bot) authorizedReaction(guildID, userID string) bool {
-	return allows(b.allowed.UserIDs, userID) &&
-		allows(b.allowed.GuildIDs, guildID)
-}
-
 // resolveChannel returns the channel for channelID, preferring the gateway state
 // cache and falling back to a REST fetch. Returns nil when it can't be resolved —
 // the caller treats that as "not a thread", so the normal open-a-thread path runs.
@@ -303,14 +318,6 @@ func threadContext(ch *discordgo.Channel) (inThread bool, name, parentID string)
 		return false, "", ""
 	}
 	return true, ch.Name, ch.ParentID
-}
-
-// authorizedParent gates a mention that arrived inside a thread: user+guild as
-// usual, with the channel dimension checked against the thread's PARENT channel.
-func (b *Bot) authorizedParent(m *discordgo.MessageCreate, parentID string) bool {
-	return allows(b.allowed.UserIDs, m.Author.ID) &&
-		allows(b.allowed.GuildIDs, m.GuildID) &&
-		allows(b.allowed.ChannelIDs, parentID)
 }
 
 // allows reports whether id passes an allowlist dimension: an empty list

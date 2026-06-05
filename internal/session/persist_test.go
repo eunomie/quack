@@ -34,7 +34,7 @@ func TestHeadless_PersistsRecordWithSessionRef(t *testing.T) {
 	svc, _, _, fs := newHeadlessServiceFakes(d)
 
 	svc.startHeadless(context.Background(), "claude", "thread-1", "/wt", "high", "demo", "acme/widget",
-		RoleOwner, nil, turnReq{channelID: "c", messageID: "m1", text: "go"})
+		RoleOwner, nil, "owner", turnReq{channelID: "c", messageID: "m1", text: "go"})
 	svc.waitIdle("thread-1")
 
 	rec, ok := readRecord(t, fs, "demo")
@@ -61,13 +61,13 @@ func TestHeadless_StopRemovesRecord(t *testing.T) {
 	svc, _, _, fs := newHeadlessServiceFakes(d)
 
 	svc.startHeadless(context.Background(), "claude", "thread-1", "/wt", "", "demo", "",
-		RoleOwner, nil, turnReq{channelID: "c", messageID: "m1", text: "go"})
+		RoleOwner, nil, "owner", turnReq{channelID: "c", messageID: "m1", text: "go"})
 	svc.waitIdle("thread-1")
 	if _, ok := readRecord(t, fs, "demo"); !ok {
 		t.Fatalf("record should exist before stop")
 	}
 
-	svc.StopThread(context.Background(), "thread-1")
+	svc.StopThread(context.Background(), "thread-1", Caller{Role: RoleOwner})
 	if _, ok := readRecord(t, fs, "demo"); ok {
 		t.Errorf("record should be removed after /stop")
 	}
@@ -81,7 +81,7 @@ func TestHeadless_PromoteRemovesRecord(t *testing.T) {
 	}
 
 	svc.startHeadless(context.Background(), "claude", "thread-1", "/wt", "", "demo", "",
-		RoleOwner, nil, turnReq{channelID: "c", messageID: "m1", text: "go"})
+		RoleOwner, nil, "owner", turnReq{channelID: "c", messageID: "m1", text: "go"})
 	svc.waitIdle("thread-1")
 	if _, ok := readRecord(t, fs, "demo"); !ok {
 		t.Fatalf("record should exist before promote")
@@ -115,7 +115,7 @@ func TestHeadless_RehydrateRestoresAndResumes(t *testing.T) {
 		t.Errorf("restored session label = %q, want %q", got, "eunomie/quack")
 	}
 
-	if !svc.FeedThread(context.Background(), "thread-x", "thread-x", "m9", "continue", nil) {
+	if !svc.FeedThread(context.Background(), "thread-x", "thread-x", "m9", "continue", nil, Caller{Role: RoleOwner}) {
 		t.Fatalf("feed should report the rehydrated thread as tracked")
 	}
 	svc.waitIdle("thread-x")
@@ -227,7 +227,7 @@ func TestHeadless_InPlace_PersistsAndKeepsThreadOpen(t *testing.T) {
 	svc, _, r, fs := newHeadlessServiceFakes(d)
 
 	svc.startHeadless(context.Background(), "claude", "post1", "/wt", "high", "demo", "acme/widget",
-		RoleOwner, nil, turnReq{channelID: "post1", messageID: "m1", text: "go"},
+		RoleOwner, nil, "owner", turnReq{channelID: "post1", messageID: "m1", text: "go"},
 		inPlaceOpts{inPlace: true, titleBase: "Help with login"})
 	svc.waitIdle("post1")
 
@@ -239,7 +239,7 @@ func TestHeadless_InPlace_PersistsAndKeepsThreadOpen(t *testing.T) {
 		t.Errorf("record TitleBase=%q InPlace=%v, want \"Help with login\"/true", rec.TitleBase, rec.InPlace)
 	}
 
-	svc.StopThread(context.Background(), "post1")
+	svc.StopThread(context.Background(), "post1", Caller{Role: RoleOwner})
 	for _, id := range r.archived {
 		if id == "post1" {
 			t.Errorf("in-place thread post1 must not be archived on stop; archived=%v", r.archived)
@@ -269,7 +269,7 @@ func TestHeadless_RehydrateInPlaceKeepsThreadOpen(t *testing.T) {
 		t.Fatalf("restored session lost in-place state: %+v", got)
 	}
 
-	svc.StopThread(context.Background(), "post1")
+	svc.StopThread(context.Background(), "post1", Caller{Role: RoleOwner})
 	for _, id := range r.archived {
 		if id == "post1" {
 			t.Errorf("rehydrated in-place thread must not be archived on stop; archived=%v", r.archived)

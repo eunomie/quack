@@ -17,7 +17,7 @@ func TestHeadless_GuestTurnUsesContainerLauncherAndTearsDownOnStop(t *testing.T)
 
 	handle := &SandboxHandle{AgentContainer: "q-agent", Workdir: "/work/r", Name: "guest-sess"}
 	svc.startHeadless(context.Background(), "claude", "thread-g", "/work/r", "high", "guest-sess", "owner/repo",
-		RoleGuest, handle,
+		RoleGuest, handle, "alice",
 		turnReq{channelID: "c", messageID: "m1", text: "do the thing"})
 	svc.waitIdle("thread-g")
 
@@ -36,11 +36,65 @@ func TestHeadless_GuestTurnUsesContainerLauncherAndTearsDownOnStop(t *testing.T)
 		t.Errorf("container launcher = %+v, want container q-agent / workdir /work/r", cl)
 	}
 
-	if !svc.StopThread(context.Background(), "thread-g") {
+	if !svc.StopThread(context.Background(), "thread-g", Caller{Role: RoleOwner}) {
 		t.Fatalf("stop should report it ended a tracked session")
 	}
 	if fs.teardowns != 1 {
 		t.Errorf("Teardown called %d times on stop, want exactly 1", fs.teardowns)
+	}
+}
+
+// Own-session-only: a guest may feed/stop only the session it started. A guest
+// acting on another user's session is silently ignored (returns false, session
+// stays tracked); the starting guest and any owner retain full access.
+func TestGuestCannotFeedOrStopOthersSession(t *testing.T) {
+	// Three turns are scripted: the launch, alice's own feed, and carol's (owner)
+	// feed. bob's rejected feeds run no turn at all.
+	d := &fakeDriver{turns: []scripted{
+		{texts: []string{"ok"}, ref: "g-ref"},
+		{texts: []string{"more"}, ref: "g-ref"},
+		{texts: []string{"owner turn"}, ref: "g-ref"},
+	}}
+	svc, _ := newHeadlessService(d)
+
+	// alice starts the session.
+	svc.startHeadless(context.Background(), "claude", "thread-g", "/work/r", "high", "guest-sess", "owner/repo",
+		RoleGuest, nil, "alice",
+		turnReq{channelID: "c", messageID: "m1", text: "do the thing"})
+	svc.waitIdle("thread-g")
+
+	feed := func(c Caller) bool {
+		return svc.FeedThread(context.Background(), "thread-g", "thread-g", "m-feed", "again", nil, c)
+	}
+
+	// A different guest (bob) cannot feed alice's session.
+	if feed(Caller{Role: RoleGuest, UserID: "bob"}) {
+		t.Error("a guest must not be able to feed another guest's session")
+	}
+	// alice (the owner of this session) can feed it.
+	if !feed(Caller{Role: RoleGuest, UserID: "alice"}) {
+		t.Error("the starting guest must be able to feed its own session")
+	}
+	svc.waitIdle("thread-g")
+	// An owner can feed any session.
+	if !feed(Caller{Role: RoleOwner, UserID: "carol"}) {
+		t.Error("an owner must be able to feed any session")
+	}
+	svc.waitIdle("thread-g")
+
+	// bob cannot stop alice's session: it's a no-op and the session stays tracked.
+	if svc.StopThread(context.Background(), "thread-g", Caller{Role: RoleGuest, UserID: "bob"}) {
+		t.Error("a guest must not be able to stop another guest's session")
+	}
+	if !svc.Tracked("thread-g") {
+		t.Fatal("session must stay tracked after a foreign guest's failed /stop")
+	}
+	// alice can stop her own session.
+	if !svc.StopThread(context.Background(), "thread-g", Caller{Role: RoleGuest, UserID: "alice"}) {
+		t.Error("the starting guest must be able to stop its own session")
+	}
+	if svc.Tracked("thread-g") {
+		t.Error("session must be gone after the owning guest's /stop")
 	}
 }
 
@@ -91,7 +145,7 @@ func TestPromoteThread_RefusesGuestSandbox(t *testing.T) {
 
 	handle := &SandboxHandle{AgentContainer: "q-agent", Workdir: "/work/r", Name: "guest-sess"}
 	svc.startHeadless(context.Background(), "claude", "thread-g", "/work/r", "high", "guest-sess", "owner/repo",
-		RoleGuest, handle,
+		RoleGuest, handle, "alice",
 		turnReq{channelID: "c", messageID: "m1", text: "do the thing"})
 	svc.waitIdle("thread-g")
 
@@ -118,14 +172,14 @@ func TestHeadless_OwnerTurnHasNoLauncherOrSandbox(t *testing.T) {
 	svc.UseSandbox(fs, GuestPolicy{})
 
 	svc.startHeadless(context.Background(), "claude", "thread-o", "/wt", "high", "owner-sess", "owner/repo",
-		RoleOwner, nil,
+		RoleOwner, nil, "owner",
 		turnReq{channelID: "c", messageID: "m1", text: "go"})
 	svc.waitIdle("thread-o")
 
 	if d.seen[0].Launcher != nil {
 		t.Errorf("owner turn launcher = %v, want nil (DirectLauncher)", d.seen[0].Launcher)
 	}
-	svc.StopThread(context.Background(), "thread-o")
+	svc.StopThread(context.Background(), "thread-o", Caller{Role: RoleOwner})
 	if fs.teardowns != 0 {
 		t.Errorf("owner stop must not tear down a sandbox, got %d teardowns", fs.teardowns)
 	}

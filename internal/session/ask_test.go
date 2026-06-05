@@ -127,7 +127,7 @@ func TestAsk_StopAbandonsPending(t *testing.T) {
 	}()
 	waitFor(t, "pending ask", func() bool { return svc.HasPendingAsk("thread-1") })
 
-	svc.StopThread(context.Background(), "thread-1")
+	svc.StopThread(context.Background(), "thread-1", Caller{Role: RoleOwner})
 	select {
 	case err := <-done:
 		if err == nil {

@@ -119,7 +119,7 @@ func TestStream_FirstTurnRendersAndPersists(t *testing.T) {
 	svc, r := newStreamService(d)
 
 	svc.startHeadless(context.Background(), "claude", "thread-1", "/wt", "high", "demo", "",
-		RoleOwner, nil, turnReq{channelID: "c", messageID: "m1", text: "do the thing"})
+		RoleOwner, nil, "owner", turnReq{channelID: "c", messageID: "m1", text: "do the thing"})
 
 	<-d.opened
 	waitFor(t, "first send", func() bool { return sess.sentCount() == 1 })
@@ -156,13 +156,13 @@ func TestStream_MidTurnInterjection(t *testing.T) {
 	svc, r := newStreamService(d)
 
 	svc.startHeadless(context.Background(), "claude", "thread-1", "/wt", "", "demo", "",
-		RoleOwner, nil, turnReq{channelID: "c", messageID: "m1", text: "long task"})
+		RoleOwner, nil, "owner", turnReq{channelID: "c", messageID: "m1", text: "long task"})
 	<-d.opened
 	waitFor(t, "first send", func() bool { return sess.sentCount() == 1 })
 
 	// Owner interjects mid-turn. The loop must Interrupt the in-flight turn and Send
 	// the new message as the next turn.
-	if !svc.FeedThread(context.Background(), "thread-1", "thread-1", "m2", "actually, stop and do X", nil) {
+	if !svc.FeedThread(context.Background(), "thread-1", "thread-1", "m2", "actually, stop and do X", nil, Caller{Role: RoleOwner}) {
 		t.Fatalf("feed should report tracked thread")
 	}
 	waitFor(t, "interrupt + second send", func() bool {
@@ -197,14 +197,14 @@ func TestStream_StopClosesSession(t *testing.T) {
 	svc, _ := newStreamService(d)
 
 	svc.startHeadless(context.Background(), "claude", "thread-1", "/wt", "", "demo", "",
-		RoleOwner, nil, turnReq{channelID: "c", messageID: "m1", text: "go"})
+		RoleOwner, nil, "owner", turnReq{channelID: "c", messageID: "m1", text: "go"})
 	<-d.opened
 	waitFor(t, "first send", func() bool { return sess.sentCount() == 1 })
 	sess.emit(agentproc.AssistantText{Text: "hi"})
 	sess.emit(agentproc.TurnComplete{})
 	svc.waitIdle("thread-1")
 
-	if !svc.StopThread(context.Background(), "thread-1") {
+	if !svc.StopThread(context.Background(), "thread-1", Caller{Role: RoleOwner}) {
 		t.Fatalf("stop should end the session")
 	}
 	waitFor(t, "session closed", func() bool {

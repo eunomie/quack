@@ -483,7 +483,7 @@ func TestHandle_AgentNamesSession(t *testing.T) {
 	// Stop the session so the async title updater drains and exits before we read
 	// renames (otherwise the title goroutine races the assertions below).
 	ls := svc.sessions[r.threadID]
-	svc.StopThread(context.Background(), r.threadID)
+	svc.StopThread(context.Background(), r.threadID, Caller{Role: RoleOwner})
 	<-ls.title.done
 
 	if len(g.worktrees) != 1 || !strings.Contains(g.worktrees[0], "revue-worktrees/readme-suggestions|readme-suggestions|origin/main") {
@@ -536,7 +536,7 @@ func TestPromoteThread(t *testing.T) {
 	svc.drivers = map[string]agentproc.Driver{"claude": d}
 
 	svc.startHeadless(context.Background(), "claude", "thread-9", "/wt", "xhigh", "dagger-main-tok", "",
-		RoleOwner, nil, turnReq{channelID: "c", messageID: "m", text: "go"})
+		RoleOwner, nil, "owner", turnReq{channelID: "c", messageID: "m", text: "go"})
 	svc.waitIdle("thread-9") // first turn done -> sessionRef captured
 
 	if !svc.PromoteThread(context.Background(), "thread-9") {
@@ -567,7 +567,7 @@ func TestPromoteThread_NotReady(t *testing.T) {
 	svc.drivers = map[string]agentproc.Driver{"claude": d}
 
 	svc.startHeadless(context.Background(), "claude", "thread-10", "/wt", "", "n", "",
-		RoleOwner, nil, turnReq{channelID: "c", messageID: "m", text: "go"})
+		RoleOwner, nil, "owner", turnReq{channelID: "c", messageID: "m", text: "go"})
 	svc.waitIdle("thread-10")
 
 	if !svc.PromoteThread(context.Background(), "thread-10") {

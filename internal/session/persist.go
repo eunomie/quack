@@ -32,6 +32,7 @@ type sessionRecord struct {
 	RootMessageID string `json:"root_message_id"`
 	SessionRef    string `json:"session_ref"`
 	AskToken      string `json:"ask_token,omitempty"` // routes ask_user MCP calls back to this session
+	AuthorID      string `json:"author_id"`           // Discord id of the user who started the session (own-session-only gate)
 
 	// Guest-session sandbox. Role distinguishes guest from owner across a restart;
 	// Sandbox holds only non-secret container/volume identifiers (the PAT and
@@ -59,6 +60,7 @@ func (ls *liveSession) record() sessionRecord {
 		RootMessageID: ls.rootMessageID,
 		SessionRef:    ls.sessionRef,
 		AskToken:      ls.askToken,
+		AuthorID:      ls.authorID,
 		Role:          ls.role,
 		Sandbox:       ls.sandbox,
 	}
@@ -121,6 +123,7 @@ func (s *Service) newSession(ctx context.Context, rec sessionRecord) *liveSessio
 		sessionRef:    rec.SessionRef,
 		rootChannelID: rec.RootChannelID,
 		rootMessageID: rec.RootMessageID,
+		authorID:      rec.AuthorID,
 		role:          rec.Role,
 
 		queue:  make(chan turnReq, 32),
