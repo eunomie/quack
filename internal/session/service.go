@@ -77,6 +77,67 @@ type History interface {
 	RecentMessages(ctx context.Context, channelID, beforeID string, limit int) ([]Message, error)
 }
 
+// SandboxMount is a host:container read-only bind for a guest's minimal creds.
+type SandboxMount struct {
+	Host      string
+	Container string
+}
+
+// SandboxSpec describes a guest session's sandbox (session's plain mirror of the
+// internal/sandbox adapter's Spec). Secrets (GitHubPAT) live here, sourced from
+// GuestPolicy at call time — never persisted.
+type SandboxSpec struct {
+	SessionName  string
+	RepoURL      string
+	CloneRef     string
+	RepoDir      string
+	GitHubPAT    string
+	GitUserName  string
+	GitUserEmail string
+	ModelMounts  []SandboxMount
+	AgentEnv     []string
+	EgressAllow  []string
+}
+
+// SandboxHandle identifies a provisioned sandbox. Persisted in the session
+// record, so it holds only non-secret identifiers.
+type SandboxHandle struct {
+	Name           string `json:"name"`
+	AgentContainer string `json:"agent_container"`
+	DindContainer  string `json:"dind_container"`
+	ProxyContainer string `json:"proxy_container"`
+	IntNetwork     string `json:"int_network"`
+	ExtNetwork     string `json:"ext_network"`
+	CertVolume     string `json:"cert_volume"`
+	WorkVolume     string `json:"work_volume"`
+	Workdir        string `json:"workdir"`
+}
+
+// Sandboxer provisions/tears down the per-guest-session container set. The
+// concrete adapter is internal/sandbox; session depends only on this interface
+// and the plain types above. Reattach takes a freshly-built spec so secrets come
+// from current config at rehydrate, not from the persisted handle.
+type Sandboxer interface {
+	Provision(ctx context.Context, spec SandboxSpec) (*SandboxHandle, error)
+	Teardown(ctx context.Context, h *SandboxHandle) error
+	Reattach(ctx context.Context, h *SandboxHandle, spec SandboxSpec) error
+	Launcher(h *SandboxHandle) agentproc.Launcher
+}
+
+// GuestPolicy is the per-deployment guest configuration session needs to build a
+// SandboxSpec and a tool-restricted driver. Supplied by main.go via UseSandbox.
+type GuestPolicy struct {
+	GitHubPAT        string
+	GitUserName      string
+	GitUserEmail     string
+	EgressAllow      []string
+	ModelMounts      []SandboxMount
+	AllowedTools     string
+	DisallowedTools  string
+	DisallowedSkills []string
+	AllowedSkills    []string
+}
+
 // Status reactions placed on the user's own triggering message.
 const (
 	emojiWorking = "👀"
@@ -125,6 +186,7 @@ type Request struct {
 	// current title, used verbatim as the Discord-facing session title.
 	InThread   bool
 	ThreadName string
+	Role       Role // owner by default; set by the Discord layer
 }
 
 // Service orchestrates a session launch.
@@ -155,6 +217,9 @@ type Service struct {
 	askByToken map[string]*liveSession
 
 	runner Runner
+
+	sandbox Sandboxer
+	guest   GuestPolicy
 }
 
 // New builds a Service with real filesystem writers.

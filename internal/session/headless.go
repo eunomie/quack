@@ -75,6 +75,9 @@ func (s *Service) UseDrivers(d map[string]agentproc.Driver) { s.drivers = d }
 // UseHistory supplies the Discord history reader for the fluent infer step.
 func (s *Service) UseHistory(h History) { s.history = h }
 
+// UseSandbox wires in the sandbox adapter and guest policy for guest sessions.
+func (s *Service) UseSandbox(sb Sandboxer, g GuestPolicy) { s.sandbox = sb; s.guest = g }
+
 func (s *Service) startHeadless(ctx context.Context, agentName, threadID, workdir, effort, name, label string, first turnReq, opts ...inPlaceOpts) {
 	var ip inPlaceOpts
 	if len(opts) > 0 {
