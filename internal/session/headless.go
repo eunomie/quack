@@ -38,7 +38,14 @@ type liveSession struct {
 	titleBase  string // verbatim Discord title (the post name); empty => name+label
 	inPlace    bool   // session runs in a user-owned thread; don't archive on stop
 	threadID   string
+	askToken   string // routes ask_user MCP calls back to this session
 	sessionRef string // guarded by mu (read by PromoteThread from another goroutine)
+
+	// pending is the in-flight owner question (ask_user), if any. It is set by the
+	// MCP handler goroutine and resolved by an owner reaction/reply, so it is
+	// guarded by askMu (separate from mu).
+	askMu   sync.Mutex
+	pending *pendingAsk
 
 	// Root (triggering) message + the status emoji currently shown on it. The
 	// global status tracks the latest turn so the channel view stays current.
@@ -118,11 +125,14 @@ func (s *Service) StopThread(ctx context.Context, threadID string) bool {
 	ls, ok := s.sessions[threadID]
 	if ok {
 		delete(s.sessions, threadID)
+		delete(s.askByToken, ls.askToken)
 	}
 	s.hmu.Unlock()
 	if !ok {
 		return false
 	}
+	// Abandon any in-flight question so its MCP call returns instead of hanging.
+	ls.cancelPending()
 	ls.close()
 	// Wait for the run loop to fully exit before touching the root-message status:
 	// lastGlobalEmoji is otherwise owned by the runLoop goroutine, and the wait is
@@ -196,7 +206,9 @@ func (s *Service) PromoteThread(ctx context.Context, threadID string) bool {
 	// Hand off: stop the headless loop, then resume the session interactively in tmux.
 	s.hmu.Lock()
 	delete(s.sessions, threadID)
+	delete(s.askByToken, ls.askToken)
 	s.hmu.Unlock()
+	ls.cancelPending()
 	ls.close()
 	// The agent session now lives in tmux; drop the headless record so a restart
 	// doesn't try to resume it back into a headless thread.

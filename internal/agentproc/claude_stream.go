@@ -35,6 +35,15 @@ func (d Claude) streamArgs(o OpenOpts) []string {
 	if d.Model != "" {
 		a = append(a, "--model", d.Model)
 	}
+	// Owner-answered questions: expose quack's ask_user MCP tool, disallow the
+	// UI-less native AskUserQuestion, and nudge the model toward the MCP tool.
+	if d.AskMCPURL != "" && o.AskToken != "" {
+		a = append(a,
+			"--mcp-config", askMCPConfig(d.AskMCPURL, o.AskToken),
+			"--disallowedTools", "AskUserQuestion",
+			"--append-system-prompt", askNudge,
+		)
+	}
 	if o.SessionRef != "" {
 		return append(a, "--resume", o.SessionRef)
 	}
@@ -46,6 +55,21 @@ func (d Claude) streamArgs(o OpenOpts) []string {
 		a = append(a, strings.Fields(strings.ReplaceAll(d.EffortTemplate, "{effort}", o.Effort))...)
 	}
 	return a
+}
+
+// askMCPConfig builds the --mcp-config JSON registering quack's ask_user server
+// for this session (the token routes a tool call back to its thread).
+func askMCPConfig(baseURL, token string) string {
+	cfg := map[string]any{
+		"mcpServers": map[string]any{
+			"quack": map[string]any{
+				"type": "http",
+				"url":  baseURL + "?s=" + token,
+			},
+		},
+	}
+	data, _ := json.Marshal(cfg)
+	return string(data)
 }
 
 // OpenSession starts a persistent streaming claude process. It implements

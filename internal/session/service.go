@@ -106,6 +106,7 @@ type Config struct {
 	InferHistoryLimit    int    // recent Discord messages fed to the infer agent
 	StateDir             string
 	ThreadAutoArchiveMin int
+	AskTimeout           time.Duration // how long an ask_user waits for the owner (0 => default)
 	Agents               map[string]agent.Agent
 }
 
@@ -146,6 +147,9 @@ type Service struct {
 	drivers  map[string]agentproc.Driver
 	hmu      sync.Mutex
 	sessions map[string]*liveSession
+	// askByToken resolves an ask_user MCP call (which carries only a per-session
+	// token) back to its session. Guarded by hmu alongside sessions.
+	askByToken map[string]*liveSession
 }
 
 // New builds a Service with real filesystem writers.

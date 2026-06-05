@@ -19,7 +19,22 @@ type Claude struct {
 	PermissionMode string
 	AllowedTools   string
 	Settings       string // passed verbatim to `claude --settings` (JSON or file path)
+
+	// AskMCPURL is the base URL of quack's ask_user MCP server (empty disables the
+	// feature). When set on a streaming session, the per-session OpenOpts.AskToken
+	// is appended as ?s=<token> so the server can tell which session is asking; the
+	// native AskUserQuestion is disallowed and a system-prompt nudge steers the
+	// model to the MCP tool, so a headless question blocks on the owner's real answer.
+	AskMCPURL string
 }
+
+// askNudge tells the model to use the owner-answered MCP tool instead of guessing
+// when it needs a decision only the owner can make (the native AskUserQuestion has
+// no UI in headless mode).
+const askNudge = "You are running headless in a Discord thread. When you need a decision only the " +
+	"owner can make — a design choice, a yes/no, picking between options — call the " +
+	"mcp__quack__ask_user tool and wait for their answer instead of guessing or proceeding " +
+	"on your own. It posts the question to the thread and blocks until they reply."
 
 func (d Claude) args(t Turn) []string {
 	mode := d.PermissionMode

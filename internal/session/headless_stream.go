@@ -78,6 +78,7 @@ func (s *Service) ensureSession(ctx context.Context, ls *liveSession, sd agentpr
 		Workdir:    ls.workdir,
 		Effort:     ls.effort,
 		Name:       ls.name,
+		AskToken:   ls.askToken,
 	})
 	if err != nil {
 		return false

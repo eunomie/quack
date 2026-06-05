@@ -66,6 +66,10 @@ type OpenOpts struct {
 	Workdir    string
 	Effort     string
 	Name       string
+	// AskToken identifies this session to quack's ask_user MCP server, so a tool
+	// call can be routed back to this thread. Wired into the server URL only when
+	// the driver has an AskMCPURL; empty disables the per-session ask tool.
+	AskToken string
 }
 
 // Session is a live, resumable agent process that accepts interleaved input. One

@@ -31,6 +31,7 @@ type sessionRecord struct {
 	RootChannelID string `json:"root_channel_id"`
 	RootMessageID string `json:"root_message_id"`
 	SessionRef    string `json:"session_ref"`
+	AskToken      string `json:"ask_token,omitempty"` // routes ask_user MCP calls back to this session
 }
 
 // record snapshots the session's durable state. The non-ref fields are set once
@@ -50,6 +51,7 @@ func (ls *liveSession) record() sessionRecord {
 		RootChannelID: ls.rootChannelID,
 		RootMessageID: ls.rootMessageID,
 		SessionRef:    ls.sessionRef,
+		AskToken:      ls.askToken,
 	}
 }
 
@@ -89,6 +91,12 @@ func titleParts(rec sessionRecord) (name, label string) {
 func (s *Service) newSession(ctx context.Context, rec sessionRecord) *liveSession {
 	titleName, titleLabel := titleParts(rec)
 	turnCtx, cancel := context.WithCancel(ctx)
+	// The ask token routes ask_user MCP calls back to this session; mint one for a
+	// new session, keep the persisted one across a restart.
+	askToken := rec.AskToken
+	if askToken == "" {
+		askToken = s.newToken()
+	}
 	ls := &liveSession{
 		driver:    s.drivers[rec.AgentName],
 		agentName: rec.AgentName,
@@ -99,6 +107,7 @@ func (s *Service) newSession(ctx context.Context, rec sessionRecord) *liveSessio
 		titleBase: rec.TitleBase,
 		inPlace:   rec.InPlace,
 		threadID:  rec.ThreadID,
+		askToken:  askToken,
 
 		sessionRef:    rec.SessionRef,
 		rootChannelID: rec.RootChannelID,
@@ -116,6 +125,10 @@ func (s *Service) newSession(ctx context.Context, rec sessionRecord) *liveSessio
 		s.sessions = map[string]*liveSession{}
 	}
 	s.sessions[rec.ThreadID] = ls
+	if s.askByToken == nil {
+		s.askByToken = map[string]*liveSession{}
+	}
+	s.askByToken[askToken] = ls
 	s.hmu.Unlock()
 
 	// A StreamDriver (claude) runs one persistent process the owner can interject
