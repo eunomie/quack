@@ -65,3 +65,69 @@ func TestHeadless_OwnerTurnHasNoLauncherOrSandbox(t *testing.T) {
 		t.Errorf("owner stop must not tear down a sandbox, got %d teardowns", fs.teardowns)
 	}
 }
+
+// Rehydrate restores a guest session by reattaching its sandbox (not by the
+// owner worktree check, since a guest workdir is an in-container path), and the
+// rebuilt session gets a container launcher.
+func TestHeadless_RehydrateReattachesGuestSandbox(t *testing.T) {
+	d := &fakeDriver{}
+	svc, _, _, fs := newHeadlessServiceFakes(d)
+	sb := &fakeSandboxer{}
+	svc.UseSandbox(sb, GuestPolicy{GitHubPAT: "PAT", GitUserName: "O", GitUserEmail: "o@e", EgressAllow: []string{"github.com"}})
+
+	seedRecord(fs, sessionRecord{
+		Name: "guest-demo", Label: "owner/repo", AgentName: "claude",
+		Workdir: "/work/r", // in-container path; git.PathExists would be false
+		ThreadID: "thread-g", RootChannelID: "c", RootMessageID: "m1", SessionRef: "sess-1",
+		Role:    RoleGuest,
+		Sandbox: &SandboxHandle{AgentContainer: "q-agent", Workdir: "/work/r", Name: "guest-demo"},
+	})
+
+	if n := svc.Rehydrate(context.Background()); n != 1 {
+		t.Fatalf("Rehydrate restored %d guest sessions, want 1", n)
+	}
+	if sb.reattaches != 1 {
+		t.Errorf("Reattach called %d times, want exactly 1", sb.reattaches)
+	}
+	// Secrets come from current policy, never the persisted record.
+	if sb.reattachSpec.GitHubPAT != "PAT" {
+		t.Errorf("reattach spec PAT = %q, want it re-sourced from policy", sb.reattachSpec.GitHubPAT)
+	}
+	if sb.reattachSpec.SessionName != "guest-demo" {
+		t.Errorf("reattach spec SessionName = %q, want guest-demo", sb.reattachSpec.SessionName)
+	}
+	if !svc.Tracked("thread-g") {
+		t.Fatalf("guest thread should be tracked after rehydration")
+	}
+	ls := svc.sessions["thread-g"]
+	if ls.launcher == nil {
+		t.Fatalf("rehydrated guest session must have a container launcher")
+	}
+	if _, ok := ls.launcher.(agentproc.ContainerLauncher); !ok {
+		t.Errorf("rehydrated guest launcher = %T, want agentproc.ContainerLauncher", ls.launcher)
+	}
+	if ls.sandbox == nil {
+		t.Errorf("rehydrated guest session must keep its sandbox handle")
+	}
+}
+
+// A guest record can't be restored when sandbox support isn't configured
+// (UseSandbox was never called) — it is skipped, not resurrected without a box.
+func TestHeadless_RehydrateSkipsGuestWhenNoSandbox(t *testing.T) {
+	d := &fakeDriver{}
+	svc, _, _, fs := newHeadlessServiceFakes(d) // no UseSandbox
+
+	seedRecord(fs, sessionRecord{
+		Name: "guest-orphan", AgentName: "claude", Workdir: "/work/r",
+		ThreadID: "thread-go", SessionRef: "sess-1",
+		Role:    RoleGuest,
+		Sandbox: &SandboxHandle{AgentContainer: "q-agent", Workdir: "/work/r"},
+	})
+
+	if n := svc.Rehydrate(context.Background()); n != 0 {
+		t.Fatalf("Rehydrate restored %d, want 0 when guest sandbox support is unconfigured", n)
+	}
+	if svc.Tracked("thread-go") {
+		t.Errorf("guest session must not be restored without a configured sandboxer")
+	}
+}

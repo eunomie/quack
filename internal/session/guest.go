@@ -70,3 +70,18 @@ func (s *Service) prepareGuest(ctx context.Context, dir *command.Directive, prov
 		launcher: s.sandbox.Launcher(h),
 	}, nil
 }
+
+// guestReattachSpec rebuilds the SandboxSpec needed to bring a guest's sandbox
+// back after a restart. Secrets/egress come from current config (GuestPolicy),
+// never from the persisted record. No repo fields are needed — Reattach's rebuild
+// path does not re-clone (the work volume persists the clone).
+func (s *Service) guestReattachSpec(rec sessionRecord) SandboxSpec {
+	return SandboxSpec{
+		SessionName:  rec.Name,
+		GitHubPAT:    s.guest.GitHubPAT,
+		GitUserName:  s.guest.GitUserName,
+		GitUserEmail: s.guest.GitUserEmail,
+		EgressAllow:  s.guest.EgressAllow,
+		ModelMounts:  s.guest.ModelMounts,
+	}
+}

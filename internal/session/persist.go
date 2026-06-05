@@ -190,8 +190,18 @@ func (s *Service) Rehydrate(ctx context.Context) int {
 		if _, ok := s.drivers[rec.AgentName]; !ok {
 			continue // agent no longer configured
 		}
-		if !s.git.PathExists(rec.Workdir) {
-			continue // worktree removed: nothing to resume into
+		if rec.Role.IsGuest() {
+			// A guest workdir is an in-container path, so the owner worktree check
+			// doesn't apply. Bring the sandbox back instead, re-sourcing secrets from
+			// current policy (never from the persisted handle).
+			if s.sandbox == nil {
+				continue // guest sandbox support not configured; can't restore
+			}
+			if err := s.sandbox.Reattach(ctx, rec.Sandbox, s.guestReattachSpec(rec)); err != nil {
+				continue // sandbox gone (e.g. volume removed) — skip
+			}
+		} else if !s.git.PathExists(rec.Workdir) {
+			continue // owner worktree removed: nothing to resume into
 		}
 		s.newSession(ctx, rec)
 		// Greet the thread so you can tell the session came back alive after the
