@@ -80,6 +80,13 @@ func (b *Bot) onMessage(s *discordgo.Session, m *discordgo.MessageCreate) {
 			b.svc.PromoteThread(context.Background(), m.ChannelID)
 			return
 		}
+		// Fast path: a configured trigger (e.g. /revue) runs its binary directly in
+		// the session's workdir, skipping the agent. Like /stop and /attach it's an
+		// explicit command, so it takes precedence over treating the text as an
+		// ask_user answer. Falls through when the message isn't a fast command.
+		if b.svc.RunFastCommand(context.Background(), m.ChannelID, m.ID, content) {
+			return
+		}
 		// While the agent is blocked on an ask_user question, a text reply is the
 		// answer, not a new turn. Empty content (an attachment-only message) falls
 		// through to FeedThread so it can still interject.
