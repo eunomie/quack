@@ -1,6 +1,7 @@
 package session
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/eunomie/quack/internal/command"
@@ -31,4 +32,41 @@ func guestTargetAllowed(target string) error {
 		return fmt.Errorf("guests can only target a repository (e.g. owner/repo), not host paths")
 	}
 	return nil
+}
+
+// prepareGuest provisions an isolated Docker sandbox for a guest. A repo target
+// is cloned fresh inside the container; no target yields an empty sandbox. The
+// clone URL is HTTPS (the injected PAT authenticates; no SSH key in the jail).
+func (s *Service) prepareGuest(ctx context.Context, dir *command.Directive, provisional, name string) (prepResult, error) {
+	spec := SandboxSpec{
+		SessionName:  name,
+		GitHubPAT:    s.guest.GitHubPAT,
+		GitUserName:  s.guest.GitUserName,
+		GitUserEmail: s.guest.GitUserEmail,
+		EgressAllow:  s.guest.EgressAllow,
+		ModelMounts:  s.guest.ModelMounts,
+	}
+	label := ""
+	if dir.Target != "" {
+		ref, err := repo.ParseRef(dir.Target)
+		if err != nil {
+			return prepResult{}, err
+		}
+		spec.RepoURL = ref.CloneURL("https")
+		spec.CloneRef = dir.Base
+		spec.RepoDir = ref.Repo
+		label = ref.Owner + "/" + ref.Repo
+	}
+	h, err := s.sandbox.Provision(ctx, spec)
+	if err != nil {
+		return prepResult{}, fmt.Errorf("provision sandbox: %w", err)
+	}
+	return prepResult{
+		workdir:  h.Workdir,
+		name:     name,
+		isolated: true,
+		label:    label,
+		sandbox:  h,
+		launcher: s.sandbox.Launcher(h),
+	}, nil
 }

@@ -340,7 +340,7 @@ func (s *Service) run(ctx context.Context, req Request, dir *command.Directive, 
 		suggested = s.suggestName(ctx, agentName, dir.Prompt)
 	}
 
-	prep, err := s.prepare(ctx, dir, provisional, explicit, token, suggested)
+	prep, err := s.prepare(ctx, dir, provisional, explicit, token, suggested, req.Role)
 	if err != nil {
 		fail(err.Error())
 		return
@@ -412,10 +412,15 @@ type prepResult struct {
 	// label is the short workspace identifier shown in the Discord thread title:
 	// "owner/repo" for a repo ref, the directory basename for a path, or "" for a
 	// fresh temp workspace (no repo/dir).
-	label string
+	label   string
+	sandbox  *SandboxHandle     // guest only; nil for owner
+	launcher agentproc.Launcher // guest only; nil => DirectLauncher
 }
 
-func (s *Service) prepare(ctx context.Context, dir *command.Directive, provisional string, explicit bool, token, suggested string) (prepResult, error) {
+func (s *Service) prepare(ctx context.Context, dir *command.Directive, provisional string, explicit bool, token, suggested string, role Role) (prepResult, error) {
+	if role.IsGuest() {
+		return s.prepareGuest(ctx, dir, provisional, orDefault(suggested, provisional))
+	}
 	switch dir.Target {
 	case "":
 		return s.prepareScratch(provisional, suggested)

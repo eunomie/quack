@@ -1,10 +1,36 @@
 package session
 
 import (
+	"context"
 	"testing"
 
+	"github.com/eunomie/quack/internal/agentproc"
 	"github.com/eunomie/quack/internal/command"
 )
+
+type fakeSandboxer struct {
+	gotSpec SandboxSpec
+	handle  *SandboxHandle
+
+	teardowns    int         // Teardown call count
+	reattaches   int         // Reattach call count
+	reattachSpec SandboxSpec // spec passed to the last Reattach
+}
+
+func (f *fakeSandboxer) Provision(ctx context.Context, spec SandboxSpec) (*SandboxHandle, error) {
+	f.gotSpec = spec
+	f.handle = &SandboxHandle{AgentContainer: "q-agent", Workdir: "/work/r", Name: spec.SessionName}
+	return f.handle, nil
+}
+func (f *fakeSandboxer) Teardown(context.Context, *SandboxHandle) error { f.teardowns++; return nil }
+func (f *fakeSandboxer) Reattach(_ context.Context, _ *SandboxHandle, spec SandboxSpec) error {
+	f.reattaches++
+	f.reattachSpec = spec
+	return nil
+}
+func (f *fakeSandboxer) Launcher(h *SandboxHandle) agentproc.Launcher {
+	return agentproc.ContainerLauncher{Container: h.AgentContainer, Workdir: h.Workdir}
+}
 
 func TestClampGuestDirective(t *testing.T) {
 	d := &command.Directive{Headless: false, Prompt: "x", Target: "o/r"}
@@ -21,6 +47,45 @@ func TestClampGuestDirective(t *testing.T) {
 	}
 	if d2.NoWorktree {
 		t.Fatal("guest no-wt must be cleared")
+	}
+}
+
+func TestPrepareGuestProvisionsSandboxForRepo(t *testing.T) {
+	s := New(Config{}, nil, nil, nil) // git/tmux/replier unused on this path
+	fs := &fakeSandboxer{}
+	s.UseSandbox(fs, GuestPolicy{GitHubPAT: "PAT", GitUserName: "O", GitUserEmail: "o@e", EgressAllow: []string{"github.com"}})
+	dir := &command.Directive{Target: "owner/repo", Prompt: "x", Base: "main"}
+	prep, err := s.prepareGuest(context.Background(), dir, "prov", "name")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if fs.gotSpec.RepoURL == "" {
+		t.Fatal("expected a clone URL in the spec")
+	}
+	if fs.gotSpec.GitHubPAT != "PAT" {
+		t.Fatalf("spec should carry the PAT from policy, got %q", fs.gotSpec.GitHubPAT)
+	}
+	if prep.launcher == nil || prep.sandbox == nil {
+		t.Fatalf("prep missing sandbox/launcher: %+v", prep)
+	}
+	if prep.label != "owner/repo" {
+		t.Fatalf("label = %q, want owner/repo", prep.label)
+	}
+}
+
+func TestPrepareGuestEmptySandboxNoTarget(t *testing.T) {
+	s := New(Config{}, nil, nil, nil)
+	fs := &fakeSandboxer{}
+	s.UseSandbox(fs, GuestPolicy{})
+	prep, err := s.prepareGuest(context.Background(), &command.Directive{Prompt: "hi"}, "prov", "name")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if fs.gotSpec.RepoURL != "" {
+		t.Fatal("no target => empty sandbox, no RepoURL")
+	}
+	if prep.sandbox == nil || prep.launcher == nil {
+		t.Fatal("empty sandbox still gets a handle + launcher")
 	}
 }
 
