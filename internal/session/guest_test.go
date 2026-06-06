@@ -74,6 +74,44 @@ func TestPrepareGuestProvisionsSandboxForRepo(t *testing.T) {
 	}
 }
 
+// An owner who used `! sandbox` takes the sandbox path even though their Role is
+// owner: prepare(..., sandboxed=true) provisions a sandbox just like a guest.
+func TestPrepareSandboxedOwnerProvisions(t *testing.T) {
+	s := New(Config{}, nil, nil, nil)
+	fs := &fakeSandboxer{}
+	s.UseSandbox(fs, GuestPolicy{GitHubPAT: "PAT", EgressAllow: []string{"github.com"}})
+	dir := &command.Directive{Target: "owner/repo", Prompt: "x"}
+	prep, err := s.prepare(context.Background(), dir, "prov", false, "tok", "name", true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if fs.gotSpec.RepoURL == "" {
+		t.Fatal("sandboxed owner should provision a sandbox with a clone URL")
+	}
+	if prep.sandbox == nil || prep.launcher == nil {
+		t.Fatalf("prep missing sandbox/launcher: %+v", prep)
+	}
+}
+
+// An owner WITHOUT the keyword (sandboxed=false) targeting a repo takes the
+// normal owner worktree path — never prepareGuest, so the sandboxer is untouched.
+func TestPrepareUnsandboxedOwnerSkipsSandbox(t *testing.T) {
+	s := New(Config{DevSrcRoot: t.TempDir()}, newFakeGit(), newFakeTmux(), newFakeReplier())
+	fs := &fakeSandboxer{}
+	s.UseSandbox(fs, GuestPolicy{GitHubPAT: "PAT"})
+	dir := &command.Directive{Target: "owner/repo", Prompt: "x", Headless: true}
+	prep, err := s.prepare(context.Background(), dir, "prov", false, "tok", "name", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if fs.gotSpec.RepoURL != "" || fs.handle != nil {
+		t.Fatal("unsandboxed owner must NOT provision a sandbox")
+	}
+	if prep.sandbox != nil {
+		t.Fatalf("owner worktree path should yield no sandbox handle: %+v", prep)
+	}
+}
+
 func TestPrepareGuestEmptySandboxNoTarget(t *testing.T) {
 	s := New(Config{}, nil, nil, nil)
 	fs := &fakeSandboxer{}

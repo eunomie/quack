@@ -139,9 +139,11 @@ func (s *Service) newSession(ctx context.Context, rec sessionRecord) *liveSessio
 		ls.sandbox = rec.Sandbox
 		ls.launcher = s.sandbox.Launcher(rec.Sandbox)
 	}
-	// Guest sessions run with a tool-restricted driver so host-escaping skills
-	// (e.g. open-zed) are blocked. Owner sessions keep the base driver unchanged.
-	if rec.Role.IsGuest() {
+	// A sandboxed session (any guest, or an owner who used `! sandbox`) runs with
+	// the tool-restricted driver so host-escaping skills (e.g. open-zed) are
+	// blocked. A non-sandboxed owner session keeps the base driver unchanged. Key
+	// on the sandbox handle, not the role, so an owner self-test is faithful.
+	if rec.Sandbox != nil {
 		ls.driver = s.guestDriver(rec.AgentName)
 	}
 
@@ -198,10 +200,11 @@ func (s *Service) Rehydrate(ctx context.Context) int {
 		if _, ok := s.drivers[rec.AgentName]; !ok {
 			continue // agent no longer configured
 		}
-		if rec.Role.IsGuest() {
-			// A guest workdir is an in-container path, so the owner worktree check
-			// doesn't apply. Bring the sandbox back instead, re-sourcing secrets from
-			// current policy (never from the persisted handle).
+		if rec.Sandbox != nil {
+			// A sandboxed session's workdir is an in-container path, so the owner
+			// worktree check doesn't apply (this covers any guest as well as an owner
+			// `! sandbox` session). Bring the sandbox back instead, re-sourcing secrets
+			// from current policy (never from the persisted handle).
 			if s.sandbox == nil {
 				continue // guest sandbox support not configured; can't restore
 			}

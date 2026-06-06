@@ -64,6 +64,20 @@ func TestParse_NoWorktree(t *testing.T) {
 	}
 }
 
+func TestParse_Sandbox(t *testing.T) {
+	d, err := Parse("owner/repo sandbox\ndo it")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if d.Target != "owner/repo" || !d.Sandbox || d.Prompt != "do it" {
+		t.Errorf("got %+v", d)
+	}
+	// keyword absent => Sandbox defaults false
+	if d2, _ := Parse("owner/repo\ndo it"); d2.Sandbox {
+		t.Errorf("Sandbox should default false")
+	}
+}
+
 func TestParse_HeadlessForms(t *testing.T) {
 	cases := map[string]bool{
 		"r/x\nP":                true,

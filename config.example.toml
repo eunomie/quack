@@ -82,12 +82,16 @@ headless        = true
 # trigger = "/open-zed"
 # argv    = ["/home/you/.claude/skills/open-zed/open-zed.sh"]
 
-# Guest sandbox. Consulted ONLY for guest sessions, and the whole feature stays
-# inert unless [discord].guest_role_id(s) is also set. Guests run inside a
-# per-session Docker sandbox: an unprivileged agent container (the clone + the
-# creds below) plus a privileged docker:dind sidecar, on a private network whose
-# only egress is the allow-listed proxy. Build the images first (see
-# hack/sandbox/README.md): `docker build -t quack-sandbox:latest hack/sandbox`
+# Guest sandbox. Consulted for guest sessions, and also when an OWNER opts a
+# single session into the jail with `@quack ! sandbox <owner/repo>` to dogfood
+# the sandbox with their own account before exposing it to guests. Setting
+# `github_pat` here is enough to enable the sandbox for that owner self-test —
+# guest roles are NOT required (the feature is otherwise inert unless either
+# [discord].guest_role_id(s) is set or this `github_pat` is configured). Guests
+# run inside a per-session Docker sandbox: an unprivileged agent container (the
+# clone + the creds below) plus a privileged docker:dind sidecar, on a private
+# network whose only egress is the allow-listed proxy. Build the images first
+# (see hack/sandbox/README.md): `docker build -t quack-sandbox:latest hack/sandbox`
 # and `docker build -t quack-egress:latest hack/sandbox/proxy`.
 # [guest]
 # image          = "quack-sandbox:latest"   # agent container image

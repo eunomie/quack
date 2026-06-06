@@ -16,6 +16,7 @@ type Directive struct {
 	Base       string // optional base branch
 	Headless   bool   // defaults true; bare `no-headless` (or headless=false) turns it off
 	NoWorktree bool   // bare `no-wt`: run directly in the repo, no worktree (dangerous)
+	Sandbox    bool   // bare `sandbox`: force this session into the guest Docker sandbox, even for an owner (the `sandbox` keyword)
 	Prompt     string // required, verbatim, may be multiline
 }
 
@@ -83,6 +84,8 @@ func Parse(content string) (*Directive, error) {
 			d.Headless = true
 		case "no-wt":
 			d.NoWorktree = true
+		case "sandbox":
+			d.Sandbox = true
 		default:
 			if targetSet {
 				return nil, &UsageError{Msg: fmt.Sprintf("unexpected token %q. %s", tok, usage)}

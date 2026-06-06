@@ -324,9 +324,15 @@ func (s *Service) run(ctx context.Context, req Request, dir *command.Directive, 
 		report("❌ " + msg)
 	}
 
-	if req.Role.IsGuest() {
+	// A session is sandboxed when the caller is a guest (always confined) or when
+	// an owner opted this one session in with the `sandbox` keyword. The sandbox
+	// execution decisions key on `sandboxed`, not on the role: Role stays the
+	// auth/ownership signal, while the container path is driven by whether a
+	// sandbox handle is provisioned.
+	sandboxed := req.Role.IsGuest() || dir.Sandbox
+	if sandboxed {
 		if s.sandbox == nil {
-			fail("guest sandboxing is not configured on this server")
+			fail("sandboxing is not configured on this server")
 			return
 		}
 		if err := guestTargetAllowed(dir.Target); err != nil {
@@ -344,7 +350,7 @@ func (s *Service) run(ctx context.Context, req Request, dir *command.Directive, 
 		suggested = s.suggestName(ctx, agentName, dir.Prompt)
 	}
 
-	prep, err := s.prepare(ctx, dir, provisional, explicit, token, suggested, req.Role)
+	prep, err := s.prepare(ctx, dir, provisional, explicit, token, suggested, sandboxed)
 	if err != nil {
 		fail(err.Error())
 		return
@@ -422,8 +428,8 @@ type prepResult struct {
 	launcher agentproc.Launcher // guest only; nil => DirectLauncher
 }
 
-func (s *Service) prepare(ctx context.Context, dir *command.Directive, provisional string, explicit bool, token, suggested string, role Role) (prepResult, error) {
-	if role.IsGuest() {
+func (s *Service) prepare(ctx context.Context, dir *command.Directive, provisional string, explicit bool, token, suggested string, sandboxed bool) (prepResult, error) {
+	if sandboxed {
 		return s.prepareGuest(ctx, dir, orDefault(suggested, provisional))
 	}
 	switch dir.Target {

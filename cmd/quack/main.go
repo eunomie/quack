@@ -118,7 +118,11 @@ func main() {
 		if h, ok := r.(session.History); ok {
 			svc.UseHistory(h)
 		}
-		if len(cfg.Discord.GuestRoles()) > 0 {
+		// Wire the sandbox when guests are configured, OR when a guest github_pat is
+		// set even with no guest roles: the PAT is the owner's "I've configured the
+		// sandbox" signal, so an owner can dogfood `! sandbox` without exposing it to
+		// any guest first.
+		if len(cfg.Discord.GuestRoles()) > 0 || cfg.Guest.GitHubPAT != "" {
 			prov := &sandbox.DockerProvisioner{
 				D:          sandbox.NewDocker(),
 				AgentImage: cfg.Guest.Image,

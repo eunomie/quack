@@ -121,9 +121,10 @@ verbatim prompt** — so a single-line `!` mention is just a literal prompt run 
 the scratch workspace, no inference. `stripMention` trims only spaces/tabs, never
 newlines, because that first newline is the directive/prompt boundary. Directive
 tokens (any order): an optional target (repo ref, path, or the literal
-`temp-dir`), bare keywords (`codex`/`claude`, `no-headless`/`headless`, `no-wt`),
-and `key=value` flags (`agent=`, `effort=`, `name=`, `base=`, `headless=`).
-Headless is the default.
+`temp-dir`), bare keywords (`codex`/`claude`, `no-headless`/`headless`, `no-wt`,
+`sandbox`), and `key=value` flags (`agent=`, `effort=`, `name=`, `base=`,
+`headless=`). Headless is the default. `sandbox` forces the session into the
+guest Docker sandbox even for an owner (see access control below).
 
 ### Workspace preparation (`prepare` in `service.go`)
 
@@ -236,9 +237,23 @@ quack has two trust levels, resolved per Discord user in `internal/discord`
   Docker sandbox** and guests may only feed/stop **their own** sessions
   (`liveSession.canModify`), never promote to a host tmux.
 
+**Trust level vs. sandboxing are decoupled.** `Role` is purely the
+auth/ownership signal (drives `canModify`, own-session-only, promote-refusal); a
+session is *sandboxed* iff it has a `SandboxHandle`, computed as `sandboxed :=
+req.Role.IsGuest() || dir.Sandbox`. So a guest is always sandboxed, and an owner
+can opt a single session into the same jail with `@quack ! sandbox <owner/repo>`
+(the `sandbox` keyword) — useful for dogfooding the sandbox with the owner's own
+account before granting any guest role. A sandboxed owner session is clamped to
+the same envelope as a guest (forced headless, repo-or-nothing target, no-wt
+cleared) and runs the tool-restricted driver. The container-vs-host execution
+decisions therefore key on `sandboxed` (`run`/`prepare`) and on `rec.Sandbox !=
+nil` (persist/rehydrate), never on the role.
+
 The sandbox (`internal/sandbox`, behind the consumer-side `session.Sandboxer`
-interface, wired in `main.go` only when `guest_role_ids` is set) is two
-containers on a private per-session network: an **unprivileged agent container**
+interface, wired in `main.go` when `guest_role_ids` is set **or** a guest
+`github_pat` is configured — the latter being the owner's "I've set up the
+sandbox" signal that enables the `! sandbox` self-test without any guest role) is
+two containers on a private per-session network: an **unprivileged agent container**
 (holds a fresh clone + minimal injected creds; the agent's turns run via
 `docker exec` into it — the `agentproc.Launcher` seam) and a **`docker:dind`
 sidecar** (privileged; gives guests real Docker without exposing the host
