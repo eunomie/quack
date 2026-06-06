@@ -37,8 +37,16 @@ func (d *Docker) CreateNetwork(ctx context.Context, name string, internal bool) 
 	return err
 }
 
-func (d *Docker) ConnectNetwork(ctx context.Context, network, container string) error {
-	_, err := d.run(ctx, "docker", "network", "connect", network, container)
+// ConnectNetwork attaches container to network, optionally under extra DNS
+// aliases. The dind sidecar is aliased "docker" on the agent's network so the
+// agent reaches it at the hostname dind's own TLS cert is issued for.
+func (d *Docker) ConnectNetwork(ctx context.Context, network, container string, aliases ...string) error {
+	args := []string{"network", "connect"}
+	for _, a := range aliases {
+		args = append(args, "--alias", a)
+	}
+	args = append(args, network, container)
+	_, err := d.run(ctx, "docker", args...)
 	return err
 }
 

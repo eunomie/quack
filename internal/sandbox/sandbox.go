@@ -126,7 +126,10 @@ func (p *DockerProvisioner) bringUp(ctx context.Context, h *Handle, spec Spec) e
 		p.DindImage); err != nil {
 		return err
 	}
-	if err := p.D.ConnectNetwork(ctx, h.IntNetwork, h.DindContainer); err != nil {
+	// Alias the dind sidecar as "docker" on the agent's network: dind's TLS server
+	// cert is issued for the hostname "docker" (its canonical sibling name), not
+	// the per-session container name, so the agent must reach it at tcp://docker.
+	if err := p.D.ConnectNetwork(ctx, h.IntNetwork, h.DindContainer, "docker"); err != nil {
 		return err
 	}
 
@@ -138,8 +141,8 @@ func (p *DockerProvisioner) bringUp(ctx context.Context, h *Handle, spec Spec) e
 		"-v", h.CertVolume + ":/certs:ro",
 		"-e", "HTTPS_PROXY=http://" + h.ProxyContainer + ":" + port,
 		"-e", "HTTP_PROXY=http://" + h.ProxyContainer + ":" + port,
-		"-e", "NO_PROXY=" + h.DindContainer + ",localhost,127.0.0.1",
-		"-e", "DOCKER_HOST=tcp://" + h.DindContainer + ":2376",
+		"-e", "NO_PROXY=docker,localhost,127.0.0.1",
+		"-e", "DOCKER_HOST=tcp://docker:2376",
 		"-e", "DOCKER_TLS_VERIFY=1",
 		"-e", "DOCKER_CERT_PATH=/certs/client",
 		"-e", "GIT_AUTHOR_NAME=" + spec.GitUserName,

@@ -48,6 +48,10 @@ func TestProvisionCreatesContainerSetAndClones(t *testing.T) {
 		"network create --internal", "volume create",
 		"quack-egress:latest", "docker:dind", "quack-sandbox:latest",
 		"git clone",
+		// dind must be aliased "docker" on the agent net (its TLS cert's SAN) and
+		// the agent must reach it there — verified live on the host (spike P4).
+		"network connect --alias docker",
+		"DOCKER_HOST=tcp://docker:2376",
 	} {
 		if !hasCall(*calls, want) {
 			t.Fatalf("missing call containing %q in %v", want, *calls)
