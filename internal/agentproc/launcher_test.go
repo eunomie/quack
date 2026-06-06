@@ -114,3 +114,18 @@ func TestCodexRunTurnUsesLauncher(t *testing.T) {
 		t.Fatalf("ref=%q texts=%v", done.SessionRef, texts)
 	}
 }
+
+// The streaming session path (claude's OpenSession) must build its child process
+// through the launcher too — otherwise a guest's persistent claude runs on the
+// host with an in-container workdir and fails to start.
+func TestClaudeOpenSessionUsesLauncher(t *testing.T) {
+	f := &fakeLauncher{}
+	sess, err := Claude{}.OpenSession(context.Background(), OpenOpts{Workdir: "/work", Launcher: f})
+	if err != nil {
+		t.Fatalf("open: %v", err)
+	}
+	defer sess.Close()
+	if f.gotProgram != "claude" || f.gotDir != "/work" {
+		t.Fatalf("program=%q dir=%q — OpenSession bypassed the launcher", f.gotProgram, f.gotDir)
+	}
+}

@@ -79,6 +79,7 @@ func (s *Service) ensureSession(ctx context.Context, ls *liveSession, sd agentpr
 		Effort:     ls.effort,
 		Name:       ls.name,
 		AskToken:   ls.askToken,
+		Launcher:   ls.launcher, // guest sessions: run the streaming claude inside the container
 	})
 	if err != nil {
 		return false

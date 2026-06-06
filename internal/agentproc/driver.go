@@ -69,6 +69,9 @@ type OpenOpts struct {
 	Workdir    string
 	Effort     string
 	Name       string
+	// Launcher decides where the streaming child process runs (host vs container),
+	// mirroring Turn.Launcher. nil means run directly on the host (DirectLauncher).
+	Launcher Launcher
 	// AskToken identifies this session to quack's ask_user MCP server, so a tool
 	// call can be routed back to this thread. Wired into the server URL only when
 	// the driver has an AskMCPURL; empty disables the per-session ask tool.

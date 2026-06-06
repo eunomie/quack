@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"os/exec"
 	"strings"
 	"sync"
 )
@@ -81,8 +80,11 @@ func (d Claude) OpenSession(ctx context.Context, o OpenOpts) (Session, error) {
 		command = "claude"
 	}
 	ctx, cancel := context.WithCancel(ctx)
-	cmd := exec.CommandContext(ctx, command, d.streamArgs(o)...)
-	cmd.Dir = o.Workdir
+	l := o.Launcher
+	if l == nil {
+		l = DirectLauncher{}
+	}
+	cmd := l.Command(ctx, command, d.streamArgs(o), o.Workdir, nil)
 	stdin, err := cmd.StdinPipe()
 	if err != nil {
 		cancel()
