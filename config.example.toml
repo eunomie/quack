@@ -103,13 +103,21 @@ headless        = true
 # github_pat     = "github_pat_..."
 # git_user_name  = "Your Name"              # commit identity guests share
 # git_user_email = "you@example.com"
-# Network egress allow-list for the agent container (model API + GitHub). The
-# default already covers Anthropic/OpenAI/GitHub; override to tighten/extend.
-# egress_allow   = ["api.anthropic.com", "api.openai.com", "github.com", "api.github.com", "codeload.github.com"]
-# Minimal model credentials, mounted read-only as "host:container" (the single
-# auth file per agent — NOT the whole ~/.claude/~/.codex). Confirm exact paths
-# for your install (host-verification spike P1).
-# model_cred_mounts = ["/home/you/.codex/auth.json:/root/.codex/auth.json", "/home/you/.claude/.credentials.json:/root/.claude/.credentials.json"]
+# Network egress allow-list for the agent container (model API + GitHub + dagger).
+# The default covers Anthropic/OpenAI/GitHub and dagger Cloud; override to
+# tighten/extend.
+# egress_allow   = ["api.anthropic.com", "api.openai.com", "github.com", "api.github.com", "codeload.github.com", "dl.dagger.io", "registry.dagger.io", "dagger.cloud", "api.dagger.cloud", "auth.dagger.cloud"]
+# Shared credential files, "host:container". Each is COPIED into the sandbox
+# (writable, so OAuth tokens can refresh) — NOT the whole ~/.claude/~/.codex,
+# just the single auth file per tool. The agent image pre-installs `dagger`
+# (its engine runs on the dind sidecar), so sharing ~/.config/dagger lets guest
+# dagger runs land in your dagger Cloud org. Confirm exact paths for your install.
+# cred_files = [
+#   "/home/you/.claude/.credentials.json:/root/.claude/.credentials.json",
+#   "/home/you/.codex/auth.json:/root/.codex/auth.json",
+#   "/home/you/.config/dagger/credentials.json:/root/.config/dagger/credentials.json",
+#   "/home/you/.config/dagger/org:/root/.config/dagger/org",
+# ]
 # Tool/skill limits applied to guests (claude only; codex has no skills). Block
 # host-escaping skills, allow safe ones. Matched as Skill(<name>).
 # disallowed_skills = ["open-zed"]

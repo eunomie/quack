@@ -81,6 +81,13 @@ func (d *Docker) Exec(ctx context.Context, container string, argv ...string) ([]
 	return d.run(ctx, "docker", append([]string{"exec", container}, argv...)...)
 }
 
+// Copy copies a host file into a container path (docker cp). Used to seed shared
+// credential files into the agent's writable home so OAuth tokens can refresh.
+func (d *Docker) Copy(ctx context.Context, hostPath, container, containerPath string) error {
+	_, err := d.run(ctx, "docker", "cp", hostPath, container+":"+containerPath)
+	return err
+}
+
 func (d *Docker) Remove(ctx context.Context, container string) error {
 	_, err := d.run(ctx, "docker", "rm", "-f", container)
 	return err

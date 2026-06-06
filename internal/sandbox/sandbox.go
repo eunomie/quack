@@ -3,13 +3,14 @@ package sandbox
 import (
 	"context"
 	"fmt"
+	"path/filepath"
 	"strings"
 
 	"github.com/eunomie/quack/internal/agentproc"
 )
 
-// Mount is a host:container bind, mounted read-only into the agent container
-// (the minimal model-credential files).
+// Mount is a host:container credential file copied into the agent container
+// (claude/codex/dagger auth), writable so OAuth tokens can refresh.
 type Mount struct {
 	Host      string
 	Container string
@@ -25,7 +26,7 @@ type Spec struct {
 	GitHubPAT    string
 	GitUserName  string
 	GitUserEmail string
-	ModelMounts  []Mount
+	CredFiles    []Mount
 	AgentEnv     []string
 	EgressAllow  []string
 }
@@ -154,12 +155,24 @@ func (p *DockerProvisioner) bringUp(ctx context.Context, h *Handle, spec Spec) e
 	for _, e := range spec.AgentEnv {
 		runArgs = append(runArgs, "-e", e)
 	}
-	for _, m := range spec.ModelMounts {
-		runArgs = append(runArgs, "-v", m.Host+":"+m.Container+":ro")
-	}
 	runArgs = append(runArgs, "--entrypoint", "sleep", p.AgentImage, "infinity")
 	if err := p.D.Run(ctx, runArgs...); err != nil {
 		return err
+	}
+
+	// Copy shared credential files into the agent's writable home, rather than
+	// bind-mounting them read-only: claude/codex/dagger refresh their OAuth tokens
+	// on use and must be able to rewrite the file. Re-sourced from current config
+	// on every (re)provision, so the host copies stay authoritative.
+	for _, m := range spec.CredFiles {
+		if dir := filepath.Dir(m.Container); dir != "." && dir != "/" {
+			if _, err := p.D.Exec(ctx, h.AgentContainer, "mkdir", "-p", dir); err != nil {
+				return err
+			}
+		}
+		if err := p.D.Copy(ctx, m.Host, h.AgentContainer, m.Container); err != nil {
+			return err
+		}
 	}
 
 	// Seed git credentials (HTTPS store) so push/gh work without an SSH key.

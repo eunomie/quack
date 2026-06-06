@@ -32,8 +32,8 @@ func (a Adapter) Launcher(h *session.SandboxHandle) agentproc.Launcher {
 }
 
 func toSpec(s session.SandboxSpec) Spec {
-	mounts := make([]Mount, len(s.ModelMounts))
-	for i, m := range s.ModelMounts {
+	mounts := make([]Mount, len(s.CredFiles))
+	for i, m := range s.CredFiles {
 		mounts[i] = Mount{Host: m.Host, Container: m.Container}
 	}
 	return Spec{
@@ -44,7 +44,7 @@ func toSpec(s session.SandboxSpec) Spec {
 		GitHubPAT:    s.GitHubPAT,
 		GitUserName:  s.GitUserName,
 		GitUserEmail: s.GitUserEmail,
-		ModelMounts:  mounts,
+		CredFiles:    mounts,
 		AgentEnv:     s.AgentEnv,
 		EgressAllow:  s.EgressAllow,
 	}

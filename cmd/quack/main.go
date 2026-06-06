@@ -135,7 +135,7 @@ func main() {
 				GitUserName:      cfg.Guest.GitUserName,
 				GitUserEmail:     cfg.Guest.GitUserEmail,
 				EgressAllow:      cfg.Guest.EgressAllow,
-				ModelMounts:      parseMounts(cfg.Guest.ModelCredMounts),
+				CredFiles:        parseMounts(cfg.Guest.CredFiles),
 				AllowedTools:     cfg.Guest.AllowedTools,
 				DisallowedTools:  cfg.Guest.DisallowedTools,
 				DisallowedSkills: cfg.Guest.DisallowedSkills,

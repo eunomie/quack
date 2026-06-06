@@ -11,15 +11,15 @@ func TestSpecRoundTripsThroughConverters(t *testing.T) {
 	in := session.SandboxSpec{
 		SessionName: "s", RepoURL: "https://x/y", CloneRef: "main", RepoDir: "y",
 		GitHubPAT: "PAT", GitUserName: "O", GitUserEmail: "o@e",
-		ModelMounts: []session.SandboxMount{{Host: "/h", Container: "/c"}},
-		AgentEnv:    []string{"A=B"}, EgressAllow: []string{"github.com"},
+		CredFiles: []session.SandboxMount{{Host: "/h", Container: "/c"}},
+		AgentEnv:  []string{"A=B"}, EgressAllow: []string{"github.com"},
 	}
 	got := toSpec(in)
 	if got.SessionName != "s" || got.RepoURL != "https://x/y" || got.GitHubPAT != "PAT" {
 		t.Fatalf("toSpec lost fields: %+v", got)
 	}
-	if len(got.ModelMounts) != 1 || got.ModelMounts[0].Host != "/h" || got.ModelMounts[0].Container != "/c" {
-		t.Fatalf("toSpec mounts: %+v", got.ModelMounts)
+	if len(got.CredFiles) != 1 || got.CredFiles[0].Host != "/h" || got.CredFiles[0].Container != "/c" {
+		t.Fatalf("toSpec mounts: %+v", got.CredFiles)
 	}
 	if !reflect.DeepEqual(got.EgressAllow, []string{"github.com"}) {
 		t.Fatalf("toSpec egress: %+v", got.EgressAllow)

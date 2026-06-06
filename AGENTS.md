@@ -257,9 +257,13 @@ two containers on a private per-session network: an **unprivileged agent contain
 (holds a fresh clone + minimal injected creds; the agent's turns run via
 `docker exec` into it — the `agentproc.Launcher` seam) and a **`docker:dind`
 sidecar** (privileged; gives guests real Docker without exposing the host
-socket). The agent container sits on an `--internal` network with no direct
-egress — its only route out is an allow-listing proxy (`hack/sandbox/proxy`),
-restricting it to the model API + GitHub. Guests are forced headless, may target
+socket). Shared credential files (`[guest].cred_files`: claude/codex/dagger auth)
+are **copied** into the agent's writable home, not bind-mounted read-only, so
+OAuth tokens can refresh inside the jail. The image pre-installs `dagger` (its
+engine runs on the dind sidecar), so sharing `~/.config/dagger` lets guest dagger
+runs land in the owner's Cloud org. The agent container sits on an `--internal`
+network with no direct egress — its only route out is an allow-listing proxy
+(`hack/sandbox/proxy`), restricting it to the model API + GitHub + dagger Cloud. Guests are forced headless, may target
 only a repo ref (cloned fresh inside the jail) or nothing (empty sandbox) — never
 a host path, `temp-dir`, or `no-wt` (`clampGuestDirective`/`guestTargetAllowed`).
 Guest tools are restricted (claude `--disallowedTools`, e.g. block `open-zed`,

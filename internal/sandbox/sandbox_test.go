@@ -74,6 +74,29 @@ func TestProvisionEmptySandboxSkipsClone(t *testing.T) {
 	}
 }
 
+func TestProvisionCopiesCredFilesWritable(t *testing.T) {
+	d, calls := recordingDocker()
+	p := &DockerProvisioner{D: d, AgentImage: "i", ProxyImage: "px", DindImage: "docker:dind"}
+	_, err := p.Provision(context.Background(), Spec{
+		SessionName: "q", EgressAllow: []string{"x"},
+		CredFiles: []Mount{{Host: "/h/.config/dagger/credentials.json", Container: "/root/.config/dagger/credentials.json"}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Creds are COPIED into the writable home (so OAuth can refresh), after the
+	// parent dir is created — not bind-mounted read-only.
+	if !hasCall(*calls, "mkdir -p /root/.config/dagger") {
+		t.Fatalf("parent dir must be created before cp: %v", *calls)
+	}
+	if !hasCall(*calls, "cp /h/.config/dagger/credentials.json quack-q-agent:/root/.config/dagger/credentials.json") {
+		t.Fatalf("cred files must be copied in (docker cp): %v", *calls)
+	}
+	if hasCall(*calls, "credentials.json:ro") {
+		t.Fatal("creds must be copied, not read-only mounted")
+	}
+}
+
 func TestHandleHoldsNoSecrets(t *testing.T) {
 	d, _ := recordingDocker()
 	p := &DockerProvisioner{D: d, AgentImage: "i", ProxyImage: "px", DindImage: "docker:dind"}

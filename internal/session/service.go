@@ -77,7 +77,7 @@ type History interface {
 	RecentMessages(ctx context.Context, channelID, beforeID string, limit int) ([]Message, error)
 }
 
-// SandboxMount is a host:container read-only bind for a guest's minimal creds.
+// SandboxMount is a host:container credential file copied into a guest sandbox.
 type SandboxMount struct {
 	Host      string
 	Container string
@@ -94,7 +94,7 @@ type SandboxSpec struct {
 	GitHubPAT    string
 	GitUserName  string
 	GitUserEmail string
-	ModelMounts  []SandboxMount
+	CredFiles    []SandboxMount
 	AgentEnv     []string
 	EgressAllow  []string
 }
@@ -131,7 +131,7 @@ type GuestPolicy struct {
 	GitUserName      string
 	GitUserEmail     string
 	EgressAllow      []string
-	ModelMounts      []SandboxMount
+	CredFiles        []SandboxMount
 	AllowedTools     string
 	DisallowedTools  string
 	DisallowedSkills []string

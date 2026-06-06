@@ -45,7 +45,7 @@ func (s *Service) prepareGuest(ctx context.Context, dir *command.Directive, name
 		GitUserName:  s.guest.GitUserName,
 		GitUserEmail: s.guest.GitUserEmail,
 		EgressAllow:  s.guest.EgressAllow,
-		ModelMounts:  s.guest.ModelMounts,
+		CredFiles:    s.guest.CredFiles,
 	}
 	label := ""
 	if dir.Target != "" {
@@ -83,7 +83,7 @@ func (s *Service) guestReattachSpec(rec sessionRecord) SandboxSpec {
 		GitUserName:  s.guest.GitUserName,
 		GitUserEmail: s.guest.GitUserEmail,
 		EgressAllow:  s.guest.EgressAllow,
-		ModelMounts:  s.guest.ModelMounts,
+		CredFiles:    s.guest.CredFiles,
 	}
 }
 
