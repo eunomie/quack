@@ -33,4 +33,11 @@ RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
     && npm i -g @anthropic-ai/claude-code @openai/codex \
     && rm -rf /var/lib/apt/lists/*
 
+# dagger CLI. Its engine runs inside the dind sidecar (the agent's DOCKER_HOST
+# points there), so guests can run dagger pipelines; sharing the owner's dagger
+# Cloud auth is handled at provision time (see [guest].cred_files). Pinned to the
+# owner's version; override with --build-arg DAGGER_VERSION=… .
+ARG DAGGER_VERSION=v0.21.4
+RUN curl -fsSL https://dl.dagger.io/dagger/install.sh | BIN_DIR=/usr/local/bin DAGGER_VERSION="$DAGGER_VERSION" sh
+
 WORKDIR /work
