@@ -93,6 +93,17 @@ Interfaces (defined consumer-side in `internal/session/service.go`) and their ad
    headless session's `workdir` is fixed and each turn resets the agent's cwd to
    it. See `hack/designs/2026-06-05-fast-slash-commands.md`.
 
+   A message in a tracked thread whose **first word is a `/<name>` switch
+   trigger** — an `[agents.<name>]` block with `switchable = true` (e.g.
+   `/claude`, `/codex`) — switches the session's agent **in place**
+   (`Service.SwitchAgent` → `doSwitch`). The outgoing agent writes a handoff
+   summary (a standalone resume-by-ref turn), quack rebuilds the session with the
+   new driver and a fresh `SessionRef`, and seeds the summary lazily as a
+   `<quack-handoff>` block on the next turn (now if `/codex <prompt>` carried a
+   prompt, else the next message). `SessionRef` is agent-native, so the new agent
+   always starts fresh. See
+   `hack/designs/2026-06-09-switch-agent-mid-thread.md`.
+
    A message in a tracked thread that is **side-chat** is dropped before
    `FeedThread` and never starts a turn: a Discord **reply to a non-bot user**
    (replies to quack's own messages still feed — that's the conversation), or

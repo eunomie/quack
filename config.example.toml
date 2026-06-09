@@ -53,6 +53,10 @@ name_template   = "-n {name}"          # set the claude session display name
 resume_template = "--resume {session}" # resume a session interactively (used by /attach)
 default_effort  = "xhigh"              # used when the command gives no effort=
 headless        = true                 # has a headless driver (headless is the default mode)
+# switchable = true opts this agent in as a /claude mid-thread switch target,
+# so in a tracked thread you can type /claude or /codex to hand the session off
+# to it (the outgoing agent writes a handoff summary first).
+switchable      = true
 permission_mode = "auto"              # autonomous + auto-vetted (≈ codex on-request); also: acceptEdits | bypassPermissions
 # allowed_tools = "Bash(git *),Read,Edit,Write"  # optional; with permission_mode=auto, leave unset to let auto govern
 # settings = '{"sandbox":{"enabled":true,"autoAllowBashIfSandboxed":true,"network":{"allowedDomains":["*"]}}}'  # `claude --settings` passthrough (any claude setting). NOTE: enabling the OS sandbox breaks `git commit` inside worktrees — the shared .git lives outside the workspace and isn't writable — so it's left off; permission_mode=auto does the vetting.
@@ -63,6 +67,10 @@ command         = "codex"
 effort_template = "--config model_reasoning_effort={effort}"
 resume_template = "resume {session}"
 headless        = true
+# switchable = true opts this agent in as a /codex mid-thread switch target,
+# so in a tracked thread you can type /claude or /codex to hand the session off
+# to it (the outgoing agent writes a handoff summary first).
+switchable      = true
 # sandbox_mode  = "danger-full-access"  # codex `--sandbox` value for headless turns. Default (when unset) is danger-full-access — no codex sandbox, matching how claude is invoked — so worktree (shared .git lives outside the workspace) and multi-repo tasks aren't blocked. Tighten with "workspace-write" or "read-only" if you want codex to restrict itself; otherwise restrict at the quack level (the `!` explicit grammar / allowlist). Interactive (no-headless) codex defaults to --dangerously-bypass-approvals-and-sandbox via interactive_args; override with interactive_args = "..." (or "" to disable).
 
 # A dedicated agent for the fluent infer one-shot, on a faster model — point
