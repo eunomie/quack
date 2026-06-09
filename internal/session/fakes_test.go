@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"sync"
 )
 
 type fakeGit struct {
@@ -99,7 +100,11 @@ type postedMsg struct {
 	silent           bool
 }
 
+// fakeReplier is the test double for Replier. All mutating methods are guarded
+// by mu so two concurrent goroutines (e.g. two titleUpdater goroutines during an
+// agent switch) can safely share the same instance.
 type fakeReplier struct {
+	mu        sync.Mutex
 	threadID  string
 	openErr   error
 	threads   []string
@@ -118,6 +123,8 @@ type fakeReplier struct {
 func newFakeReplier() *fakeReplier { return &fakeReplier{threadID: "thread-1"} }
 
 func (f *fakeReplier) OpenThread(ctx context.Context, channelID, messageID, name string, autoArchiveMin int) (string, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	if f.openErr != nil {
 		return "", f.openErr
 	}
@@ -125,41 +132,59 @@ func (f *fakeReplier) OpenThread(ctx context.Context, channelID, messageID, name
 	return f.threadID, nil
 }
 func (f *fakeReplier) Post(ctx context.Context, channelID, content string) (string, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	f.nextID++
 	f.posts = append(f.posts, postedMsg{channel: channelID, content: content})
 	return fmt.Sprintf("msg-%d", f.nextID), nil
 }
 func (f *fakeReplier) PostSilent(ctx context.Context, channelID, content string) (string, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	f.nextID++
 	f.posts = append(f.posts, postedMsg{channel: channelID, content: content, silent: true})
 	return fmt.Sprintf("msg-%d", f.nextID), nil
 }
 func (f *fakeReplier) Edit(ctx context.Context, channelID, messageID, content string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	f.edits = append(f.edits, postedMsg{channel: messageID, content: content})
 	return nil
 }
 func (f *fakeReplier) Delete(ctx context.Context, channelID, messageID string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	f.deletes = append(f.deletes, channelID+"|"+messageID)
 	return nil
 }
 func (f *fakeReplier) RenameThread(ctx context.Context, threadID, name string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	f.renames = append(f.renames, threadID+"|"+name)
 	return nil
 }
 func (f *fakeReplier) ArchiveThread(ctx context.Context, threadID string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	f.archived = append(f.archived, threadID)
 	return nil
 }
 func (f *fakeReplier) React(ctx context.Context, channelID, messageID, emoji string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	f.reacts = append(f.reacts, channelID+"|"+messageID+"|"+emoji)
 	return nil
 }
 func (f *fakeReplier) Unreact(ctx context.Context, channelID, messageID, emoji string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	f.unreacts = append(f.unreacts, channelID+"|"+messageID+"|"+emoji)
 	return nil
 }
 
 func (f *fakeReplier) RecentMessages(ctx context.Context, channelID, beforeID string, limit int) ([]Message, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	return f.recent, f.recentErr
 }
 

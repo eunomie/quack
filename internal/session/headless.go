@@ -47,6 +47,12 @@ type liveSession struct {
 	// pending.
 	pendingHandoff string
 
+	// switching is set while doSwitch is tearing down and rebuilding this session,
+	// so a second concurrent /switch on the same thread is dropped instead of
+	// racing it (the loser would orphan a rebuilt session). Guarded by the
+	// Service's hmu (claimed alongside the s.sessions lookup), not ls.mu.
+	switching bool
+
 	// pending is the in-flight owner question (ask_user), if any. It is set by the
 	// MCP handler goroutine and resolved by an owner reaction/reply, so it is
 	// guarded by askMu (separate from mu).

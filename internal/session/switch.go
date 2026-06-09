@@ -49,6 +49,122 @@ func (s *Service) runSummaryTurn(ctx context.Context, ls *liveSession, ref strin
 	return strings.TrimSpace(sb.String())
 }
 
+// wrapHandoff frames a captured summary as the <quack-handoff> block seeded onto
+// the new agent's next turn. Empty summary ⇒ empty block (nothing to seed).
+func wrapHandoff(fromAgent, summary string) string {
+	if strings.TrimSpace(summary) == "" {
+		return ""
+	}
+	return "<quack-handoff>\nA previous agent (" + fromAgent + ") worked on this session and left this handoff for you. You do not share its memory or conversation history; treat the following as your context for continuing the work.\n\n" + summary + "\n</quack-handoff>"
+}
+
+// SwitchAgent handles a /<name> switch command in a tracked thread. It returns
+// true when the first token is a switch trigger (so the bot does not fall through
+// to feed the text to the agent), false when it isn't (fall through). The slow
+// work — summarize, tear down, rebuild — runs in a goroutine, like a fast command.
+func (s *Service) SwitchAgent(ctx context.Context, threadID, channelID, messageID, text string, atts []Attachment, caller Caller) bool {
+	target, prompt, ok := s.matchSwitch(text)
+	if !ok {
+		return false
+	}
+	s.hmu.Lock()
+	ls, tracked := s.sessions[threadID]
+	if !tracked {
+		s.hmu.Unlock()
+		return false
+	}
+	// A guest may only switch a session it started; drop (but report handled, so
+	// "/codex …" is never fed as a prompt to a session the guest can't touch).
+	if !ls.canModify(caller) {
+		s.hmu.Unlock()
+		return true
+	}
+	// Claim the switch under hmu so two switch messages racing on the same thread
+	// can't both tear down and rebuild it — the loser's rebuilt session would be
+	// orphaned (a leaked loop goroutine + agent child). A second switch while one
+	// is already in flight is dropped (reported handled, not fed as text).
+	if ls.switching {
+		s.hmu.Unlock()
+		return true
+	}
+	ls.switching = true
+	s.hmu.Unlock()
+	// context.Background(): the switch must outlive the caller's request context
+	// (it tears down and rebuilds a session that keeps running afterward).
+	go s.doSwitch(context.Background(), ls, target, prompt, channelID, messageID, atts, caller)
+	return true
+}
+
+// clearSwitching releases a switch claim (see SwitchAgent) so a switch that was
+// rejected before any teardown leaves the session switchable again.
+func (s *Service) clearSwitching(ls *liveSession) {
+	s.hmu.Lock()
+	ls.switching = false
+	s.hmu.Unlock()
+}
+
+// doSwitch performs the switch: guard, tear down the old loop, summarize the
+// outgoing agent, rebuild the session with the new driver, then seed lazily. All
+// guards that can reject the switch run before any teardown, so a rejected switch
+// never disturbs the live session.
+func (s *Service) doSwitch(ctx context.Context, ls *liveSession, target, prompt, channelID, messageID string, atts []Attachment, caller Caller) {
+	if s.drivers[target] == nil {
+		_, _ = s.reply.Post(ctx, ls.threadID, "❌ unknown agent: "+target)
+		s.clearSwitching(ls) // rejected before teardown: stay switchable
+		return
+	}
+	if target == ls.agentName {
+		_, _ = s.reply.Post(ctx, ls.threadID, "already on "+target)
+		if strings.TrimSpace(prompt) != "" || len(atts) > 0 {
+			s.FeedThread(ctx, ls.threadID, channelID, messageID, prompt, atts, caller)
+		}
+		s.clearSwitching(ls) // rejected before teardown: stay switchable
+		return
+	}
+
+	oldRef := ls.ref()
+	oldAgent := ls.agentName
+	threadID := ls.threadID
+
+	// Tear down the old loop. cancelPending/close cut off any in-flight turn — the
+	// user asked to switch now.
+	s.hmu.Lock()
+	delete(s.sessions, threadID)
+	delete(s.askByToken, ls.askToken)
+	s.hmu.Unlock()
+	ls.cancelPending()
+	ls.close()
+	<-ls.done
+
+	// Summarize, if the outgoing agent ever produced a resumable ref.
+	summary := ""
+	if oldRef != "" {
+		_, _ = s.reply.Post(ctx, threadID, "🔄 switching to "+target+" — summarizing the handoff…")
+		sctx, cancel := context.WithTimeout(ctx, summaryTimeout)
+		summary = s.runSummaryTurn(sctx, ls, oldRef)
+		cancel()
+	}
+
+	// Rebuild in place with the new driver. record() carries label/role/sandbox/
+	// askToken forward; newSession picks the right loop type and (for a sandbox)
+	// rebuilds the guest launcher + driver.
+	rec := ls.record()
+	rec.AgentName = target
+	rec.SessionRef = ""
+	rec.PendingHandoff = wrapHandoff(oldAgent, summary)
+	// context.Background(): the rebuilt session must outlive this call (same reason
+	// startHeadless/Rehydrate detach from the request context).
+	newls := s.newSession(context.Background(), rec)
+	s.persistRecord(newls.record())
+
+	// The old ls (with switching=true) is now unreferenced; the rebuilt newls
+	// starts switchable, so no claim needs releasing here.
+	_, _ = s.reply.Post(ctx, threadID, "🔄 switched to "+target)
+	if strings.TrimSpace(prompt) != "" || len(atts) > 0 {
+		s.FeedThread(ctx, threadID, channelID, messageID, prompt, atts, caller)
+	}
+}
+
 // matchSwitch reports whether text's first whitespace-delimited token is a
 // switch trigger — "/<name>" for a configured agent that is headless and opted
 // in with switchable=true. On a match it returns the agent name and the rest of
