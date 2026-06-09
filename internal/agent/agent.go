@@ -12,6 +12,7 @@ type Agent struct {
 	ResumeTemplate string `toml:"resume_template"` // contains "{session}", e.g. "--resume {session}"
 	DefaultEffort  string `toml:"default_effort"`  // used when the command gives no effort
 	Headless       bool   `toml:"headless"`        // has a headless driver
+	Switchable     bool   `toml:"switchable"`      // opt in as a /<name> mid-thread switch target
 	PermissionMode string `toml:"permission_mode"` // claude: acceptEdits|bypassPermissions|auto
 	AllowedTools   string `toml:"allowed_tools"`   // claude: --allowedTools value
 	Settings       string `toml:"settings"`        // claude: --settings JSON or file (e.g. sandbox)
