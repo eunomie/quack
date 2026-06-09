@@ -104,6 +104,12 @@ func (b *Bot) onMessage(s *discordgo.Session, m *discordgo.MessageCreate) {
 		if b.svc.RunFastCommand(context.Background(), m.ChannelID, m.ID, content) {
 			return
 		}
+		// A configured /<name> (an agent with switchable=true) switches the session's
+		// agent in place, carrying a handoff summary across. Explicit command, so it
+		// takes precedence over treating the text as an ask_user answer.
+		if b.svc.SwitchAgent(context.Background(), m.ChannelID, m.ChannelID, m.ID, content, atts, caller) {
+			return
+		}
 		// While the agent is blocked on an ask_user question, a text reply is the
 		// answer, not a new turn. Empty content (an attachment-only message) falls
 		// through to FeedThread so it can still interject.
