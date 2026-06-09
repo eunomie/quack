@@ -20,7 +20,8 @@ func TestArgv(t *testing.T) {
 	}{
 		// claude defaults to --dangerously-skip-permissions on interactive launches.
 		{"claude name+effort", claude, "xhigh", "dagger-main-7k2p", "P", []string{"claude", "-n", "dagger-main-7k2p", "--effort", "xhigh", "--dangerously-skip-permissions", "P"}},
-		{"codex effort (no name template)", codex, "xhigh", "x", "P", []string{"codex", "--config", "model_reasoning_effort=xhigh", "P"}},
+		// codex defaults to --dangerously-bypass-approvals-and-sandbox on interactive launches.
+		{"codex effort (no name template)", codex, "xhigh", "x", "P", []string{"codex", "--config", "model_reasoning_effort=xhigh", "--dangerously-bypass-approvals-and-sandbox", "P"}},
 		{"claude bare", claude, "", "", "P", []string{"claude", "--dangerously-skip-permissions", "P"}},
 		{"claude interactive_args override", Agent{Command: "claude", InteractiveArgs: strptr("--foo --bar")}, "", "", "P", []string{"claude", "--foo", "--bar", "P"}},
 		{"claude interactive_args disabled", Agent{Command: "claude", InteractiveArgs: strptr("")}, "", "", "P", []string{"claude", "P"}},
@@ -72,5 +73,16 @@ func TestHeadlessDefaults(t *testing.T) {
 	b := Agent{Command: "claude", Headless: true, PermissionMode: "bypassPermissions"}
 	if got := b.Mode(); got != "bypassPermissions" {
 		t.Errorf("Mode = %q", got)
+	}
+}
+
+func TestSandboxDefaults(t *testing.T) {
+	a := Agent{Command: "codex", Headless: true}
+	if got := a.Sandbox(); got != "danger-full-access" {
+		t.Errorf("Sandbox default = %q, want danger-full-access", got)
+	}
+	b := Agent{Command: "codex", Headless: true, SandboxMode: "workspace-write"}
+	if got := b.Sandbox(); got != "workspace-write" {
+		t.Errorf("Sandbox = %q, want workspace-write", got)
 	}
 }

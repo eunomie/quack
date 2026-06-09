@@ -99,7 +99,7 @@ func main() {
 				AskMCPURL:      askURL,
 			}
 		case "codex":
-			drivers[name] = agentproc.Codex{Command: a.Command, EffortTemplate: a.EffortTemplate}
+			drivers[name] = agentproc.Codex{Command: a.Command, EffortTemplate: a.EffortTemplate, SandboxMode: a.Sandbox()}
 		default:
 			log.Printf("agent %q has headless=true but command %q has no driver; ignoring", name, a.Command)
 		}

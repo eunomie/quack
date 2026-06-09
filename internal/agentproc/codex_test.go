@@ -47,3 +47,25 @@ func TestCodexArgs(t *testing.T) {
 		t.Errorf("effort must apply only on first turn: %v", next)
 	}
 }
+
+func TestCodexSandboxArgs(t *testing.T) {
+	d := Codex{Command: "codex", SandboxMode: "danger-full-access"}
+
+	// First turn: --sandbox sits right after exec, before --json.
+	first := d.args(Turn{Prompt: "hi"})
+	if first[0] != "exec" || first[1] != "--sandbox" || first[2] != "danger-full-access" {
+		t.Errorf("first = %v, want exec --sandbox danger-full-access ...", first)
+	}
+
+	// Resume: --sandbox must precede the resume subcommand so codex parses it.
+	next := d.args(Turn{Prompt: "again", SessionRef: "th-xyz"})
+	if next[0] != "exec" || next[1] != "--sandbox" || next[2] != "danger-full-access" || next[3] != "resume" {
+		t.Errorf("resume = %v, want exec --sandbox danger-full-access resume ...", next)
+	}
+
+	// Empty SandboxMode adds no flag (codex's own default applies).
+	bare := Codex{Command: "codex"}.args(Turn{Prompt: "hi"})
+	if contains(bare, "--sandbox") {
+		t.Errorf("empty SandboxMode must add no --sandbox flag: %v", bare)
+	}
+}

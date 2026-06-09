@@ -15,12 +15,14 @@ type Agent struct {
 	PermissionMode string `toml:"permission_mode"` // claude: acceptEdits|bypassPermissions|auto
 	AllowedTools   string `toml:"allowed_tools"`   // claude: --allowedTools value
 	Settings       string `toml:"settings"`        // claude: --settings JSON or file (e.g. sandbox)
+	SandboxMode    string `toml:"sandbox_mode"`    // codex: --sandbox value (read-only|workspace-write|danger-full-access); empty => danger-full-access
 	// InteractiveArgs are extra flags appended to interactive (no-headless) and
 	// /attach launches only — not the headless driver, which governs permissions
-	// via PermissionMode. When unset, claude defaults to
-	// "--dangerously-skip-permissions" (its usual interactive workflow). Set it
-	// to override (e.g. "" to disable, or other flags); a pointer so an explicit
-	// empty value is distinguishable from "not configured".
+	// via PermissionMode (claude) / SandboxMode (codex). When unset, claude
+	// defaults to "--dangerously-skip-permissions" and codex to
+	// "--dangerously-bypass-approvals-and-sandbox" (each tool's full-access
+	// workflow). Set it to override (e.g. "" to disable, or other flags); a
+	// pointer so an explicit empty value is distinguishable from "not configured".
 	InteractiveArgs *string `toml:"interactive_args"`
 }
 
@@ -41,9 +43,11 @@ func (a Agent) Argv(effort, name, prompt string) []string {
 }
 
 // interactiveArgs returns the extra flags for interactive and /attach launches.
-// claude defaults to bypassing the permission prompt when InteractiveArgs is
-// unset, matching the usual `claude --dangerously-skip-permissions` workflow; an
-// explicit value (including "") overrides that default.
+// When InteractiveArgs is unset, each agent defaults to its full-access
+// workflow — claude `--dangerously-skip-permissions`, codex
+// `--dangerously-bypass-approvals-and-sandbox` — so worktree and multi-repo
+// tasks aren't blocked by the tool's own sandbox; an explicit value (including
+// "") overrides that default.
 func (a Agent) interactiveArgs() []string {
 	s := ""
 	switch {
@@ -51,6 +55,8 @@ func (a Agent) interactiveArgs() []string {
 		s = *a.InteractiveArgs
 	case a.Command == "claude":
 		s = "--dangerously-skip-permissions"
+	case a.Command == "codex":
+		s = "--dangerously-bypass-approvals-and-sandbox"
 	}
 	return strings.Fields(s)
 }
@@ -81,4 +87,15 @@ func (a Agent) Mode() string {
 		return "acceptEdits"
 	}
 	return a.PermissionMode
+}
+
+// Sandbox returns the codex headless sandbox mode, defaulting to
+// danger-full-access — no codex-side sandbox, so worktree (shared .git outside
+// the workspace) and multi-repo tasks run unobstructed, matching how claude is
+// invoked. Tighten with sandbox_mode = "workspace-write" | "read-only".
+func (a Agent) Sandbox() string {
+	if a.SandboxMode == "" {
+		return "danger-full-access"
+	}
+	return a.SandboxMode
 }

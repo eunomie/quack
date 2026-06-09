@@ -14,10 +14,17 @@ import (
 type Codex struct {
 	Command        string
 	EffortTemplate string
+	// SandboxMode is codex's --sandbox value (read-only|workspace-write|
+	// danger-full-access). Empty means no --sandbox flag (codex's own default).
+	// quack wires this to danger-full-access by default so worktree (shared .git
+	// outside the workspace) and multi-repo tasks aren't blocked by codex's
+	// sandbox; main.go can tighten it via the agent's sandbox_mode config.
+	SandboxMode string
 }
 
 func (d Codex) args(t Turn) []string {
 	args := []string{"exec"}
+	args = append(args, d.sandboxArgs()...)
 	if t.SessionRef != "" {
 		args = append(args, "resume", "--json", t.SessionRef, t.Prompt)
 		return args
@@ -25,6 +32,15 @@ func (d Codex) args(t Turn) []string {
 		args = append(args, strings.Fields(strings.ReplaceAll(d.EffortTemplate, "{effort}", t.Effort))...)
 	}
 	return append(args, "--json", t.Prompt)
+}
+
+// sandboxArgs returns the --sandbox flag (placed right after `exec`, before any
+// `resume` subcommand) or nothing when SandboxMode is empty.
+func (d Codex) sandboxArgs() []string {
+	if d.SandboxMode == "" {
+		return nil
+	}
+	return []string{"--sandbox", d.SandboxMode}
 }
 
 func (d Codex) RunTurn(ctx context.Context, t Turn, emit func(Event)) TurnDone {
@@ -60,6 +76,7 @@ func (d Codex) OneShot(ctx context.Context, prompt, effort string) (string, erro
 		command = "codex"
 	}
 	args := []string{"exec"}
+	args = append(args, d.sandboxArgs()...)
 	if effort != "" && d.EffortTemplate != "" {
 		args = append(args, strings.Fields(strings.ReplaceAll(d.EffortTemplate, "{effort}", effort))...)
 	}
