@@ -20,19 +20,20 @@ import (
 // Interactive (tmux) sessions need no record: they run detached, independent of
 // this process, and already outlive a restart.
 type sessionRecord struct {
-	Name          string `json:"name"`
-	Label         string `json:"label"`                // workspace label for the thread title (owner/repo or dir)
-	TitleBase     string `json:"title_base,omitempty"` // verbatim Discord title (post name); empty => name+label
-	InPlace       bool   `json:"in_place,omitempty"`   // user-owned thread; don't archive on stop
-	AgentName     string `json:"agent_name"`
-	Workdir       string `json:"workdir"`
-	Effort        string `json:"effort"`
-	ThreadID      string `json:"thread_id"`
-	RootChannelID string `json:"root_channel_id"`
-	RootMessageID string `json:"root_message_id"`
-	SessionRef    string `json:"session_ref"`
-	AskToken      string `json:"ask_token,omitempty"` // routes ask_user MCP calls back to this session
-	AuthorID      string `json:"author_id"`           // Discord id of the user who started the session (own-session-only gate)
+	Name           string `json:"name"`
+	Label          string `json:"label"`                // workspace label for the thread title (owner/repo or dir)
+	TitleBase      string `json:"title_base,omitempty"` // verbatim Discord title (post name); empty => name+label
+	InPlace        bool   `json:"in_place,omitempty"`   // user-owned thread; don't archive on stop
+	AgentName      string `json:"agent_name"`
+	Workdir        string `json:"workdir"`
+	Effort         string `json:"effort"`
+	ThreadID       string `json:"thread_id"`
+	RootChannelID  string `json:"root_channel_id"`
+	RootMessageID  string `json:"root_message_id"`
+	SessionRef     string `json:"session_ref"`
+	PendingHandoff string `json:"pending_handoff,omitempty"` // <quack-handoff> block awaiting the next turn (set on an agent switch)
+	AskToken       string `json:"ask_token,omitempty"`       // routes ask_user MCP calls back to this session
+	AuthorID       string `json:"author_id"`                 // Discord id of the user who started the session (own-session-only gate)
 
 	// Guest-session sandbox. Role distinguishes guest from owner across a restart;
 	// Sandbox holds only non-secret container/volume identifiers (the PAT and
@@ -48,21 +49,22 @@ func (ls *liveSession) record() sessionRecord {
 	ls.mu.Lock()
 	defer ls.mu.Unlock()
 	return sessionRecord{
-		Name:          ls.name,
-		Label:         ls.label,
-		TitleBase:     ls.titleBase,
-		InPlace:       ls.inPlace,
-		AgentName:     ls.agentName,
-		Workdir:       ls.workdir,
-		Effort:        ls.effort,
-		ThreadID:      ls.threadID,
-		RootChannelID: ls.rootChannelID,
-		RootMessageID: ls.rootMessageID,
-		SessionRef:    ls.sessionRef,
-		AskToken:      ls.askToken,
-		AuthorID:      ls.authorID,
-		Role:          ls.role,
-		Sandbox:       ls.sandbox,
+		Name:           ls.name,
+		Label:          ls.label,
+		TitleBase:      ls.titleBase,
+		InPlace:        ls.inPlace,
+		AgentName:      ls.agentName,
+		Workdir:        ls.workdir,
+		Effort:         ls.effort,
+		ThreadID:       ls.threadID,
+		RootChannelID:  ls.rootChannelID,
+		RootMessageID:  ls.rootMessageID,
+		SessionRef:     ls.sessionRef,
+		PendingHandoff: ls.pendingHandoff,
+		AskToken:       ls.askToken,
+		AuthorID:       ls.authorID,
+		Role:           ls.role,
+		Sandbox:        ls.sandbox,
 	}
 }
 
@@ -120,11 +122,12 @@ func (s *Service) newSession(ctx context.Context, rec sessionRecord) *liveSessio
 		threadID:  rec.ThreadID,
 		askToken:  askToken,
 
-		sessionRef:    rec.SessionRef,
-		rootChannelID: rec.RootChannelID,
-		rootMessageID: rec.RootMessageID,
-		authorID:      rec.AuthorID,
-		role:          rec.Role,
+		sessionRef:     rec.SessionRef,
+		pendingHandoff: rec.PendingHandoff,
+		rootChannelID:  rec.RootChannelID,
+		rootMessageID:  rec.RootMessageID,
+		authorID:       rec.AuthorID,
+		role:           rec.Role,
 
 		queue:  make(chan turnReq, 32),
 		done:   make(chan struct{}),

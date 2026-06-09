@@ -4,9 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/eunomie/quack/internal/agent"
+	"github.com/eunomie/quack/internal/agentproc"
 )
 
 // seedRecord writes a persisted session record into the fake FS, as a previous
@@ -274,5 +276,75 @@ func TestHeadless_RehydrateInPlaceKeepsThreadOpen(t *testing.T) {
 		if id == "post1" {
 			t.Errorf("rehydrated in-place thread must not be archived on stop; archived=%v", r.archived)
 		}
+	}
+}
+
+func TestHeadless_RehydrateConsumesHandoffOncePerTurn(t *testing.T) {
+	d := &fakeDriver{turns: []scripted{
+		{texts: []string{"a"}, ref: "sess-2"},
+		{texts: []string{"b"}, ref: "sess-3"},
+	}}
+	svc, g, _, fs := newHeadlessServiceFakes(d)
+	g.pathExists["/wt"] = true
+	seedRecord(fs, sessionRecord{
+		Name: "demo", AgentName: "claude", Workdir: "/wt", Effort: "high",
+		ThreadID: "thread-x", RootChannelID: "c", RootMessageID: "m1", SessionRef: "sess-1",
+		PendingHandoff: "<quack-handoff>SUMMARY</quack-handoff>",
+	})
+	if n := svc.Rehydrate(context.Background()); n != 1 {
+		t.Fatalf("Rehydrate restored %d, want 1", n)
+	}
+
+	svc.FeedThread(context.Background(), "thread-x", "thread-x", "m2", "first", nil, Caller{Role: RoleOwner})
+	svc.waitIdle("thread-x")
+	svc.FeedThread(context.Background(), "thread-x", "thread-x", "m3", "second", nil, Caller{Role: RoleOwner})
+	svc.waitIdle("thread-x")
+
+	if len(d.seen) != 2 {
+		t.Fatalf("driver saw %d turns, want 2", len(d.seen))
+	}
+	if !strings.Contains(d.seen[0].Prompt, "<quack-handoff>SUMMARY</quack-handoff>") ||
+		!strings.Contains(d.seen[0].Prompt, "first") {
+		t.Errorf("turn 1 prompt = %q, want handoff + 'first'", d.seen[0].Prompt)
+	}
+	if strings.Contains(d.seen[1].Prompt, "quack-handoff") {
+		t.Errorf("turn 2 prompt = %q, handoff must be consumed once", d.seen[1].Prompt)
+	}
+}
+
+func TestHeadless_RehydrateConsumesHandoffOnStreamPath(t *testing.T) {
+	sess := newFakeStreamSession("sess-1")
+	d := newFakeStreamDriver(sess)
+	g, r, fs := newFakeGit(), newFakeReplier(), newMemFS()
+	svc := New(Config{StateDir: "/state"}, g, newFakeTmux(), r)
+	svc.drivers = map[string]agentproc.Driver{"claude": d}
+	svc.mkdirAll, svc.writeFile, svc.remove = fs.mkdirAll, fs.writeFile, fs.remove
+	svc.readDir, svc.readFile = fs.readDir, fs.readFile
+	g.pathExists["/wt"] = true
+	seedRecord(fs, sessionRecord{
+		Name: "demo", AgentName: "claude", Workdir: "/wt",
+		ThreadID: "thread-x", RootChannelID: "c", RootMessageID: "m1", SessionRef: "sess-1",
+		PendingHandoff: "<quack-handoff>SUMMARY</quack-handoff>",
+	})
+	svc.Rehydrate(context.Background())
+
+	svc.FeedThread(context.Background(), "thread-x", "thread-x", "m2", "first", nil, Caller{Role: RoleOwner})
+	waitFor(t, "first send", func() bool { return sess.sentCount() >= 1 })
+
+	sess.mu.Lock()
+	first := sess.sent[0]
+	sess.mu.Unlock()
+	if !strings.Contains(first, "<quack-handoff>SUMMARY</quack-handoff>") || !strings.Contains(first, "first") {
+		t.Errorf("stream send = %q, want handoff + 'first'", first)
+	}
+
+	// A second message must not carry the handoff again — consumed exactly once.
+	svc.FeedThread(context.Background(), "thread-x", "thread-x", "m3", "second", nil, Caller{Role: RoleOwner})
+	waitFor(t, "second send", func() bool { return sess.sentCount() >= 2 })
+	sess.mu.Lock()
+	second := sess.sent[1]
+	sess.mu.Unlock()
+	if strings.Contains(second, "quack-handoff") {
+		t.Errorf("second stream send = %q, handoff must be consumed once", second)
 	}
 }

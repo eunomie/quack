@@ -93,7 +93,7 @@ func (s *Service) ensureSession(ctx context.Context, ls *liveSession, sd agentpr
 func (s *Service) streamBegin(ctx context.Context, ls *liveSession, inflight *[]turnReq, rend **turnRender, tr turnReq) {
 	isRoot := ls.isRootTurn(tr)
 	s.beginTurnStatus(ctx, ls, tr, isRoot)
-	_ = ls.sess.Send(tr.text)
+	_ = ls.sess.Send(ls.consumeHandoff(tr.text))
 	wasEmpty := len(*inflight) == 0
 	*inflight = append(*inflight, tr)
 	if wasEmpty {

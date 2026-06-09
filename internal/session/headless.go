@@ -42,6 +42,11 @@ type liveSession struct {
 	authorID   string // Discord id of the user who started the session (own-session-only gate for guests)
 	sessionRef string // guarded by mu (read by PromoteThread from another goroutine)
 
+	// pendingHandoff is a <quack-handoff> block from an agent switch, prepended to
+	// the next turn's prompt and cleared. Guarded by mu. Empty when no switch is
+	// pending.
+	pendingHandoff string
+
 	// pending is the in-flight owner question (ask_user), if any. It is set by the
 	// MCP handler goroutine and resolved by an owner reaction/reply, so it is
 	// guarded by askMu (separate from mu).
@@ -323,6 +328,23 @@ func (ls *liveSession) setRef(r string) {
 	ls.mu.Unlock()
 }
 
+// consumeHandoff prepends the pending handoff block to text the first time it's
+// called after a switch, then clears it; returns text unchanged when none is
+// pending. Mirrors how origin.go prepends <quack-context>.
+func (ls *liveSession) consumeHandoff(text string) string {
+	ls.mu.Lock()
+	h := ls.pendingHandoff
+	ls.pendingHandoff = ""
+	ls.mu.Unlock()
+	if h == "" {
+		return text
+	}
+	if text == "" {
+		return h
+	}
+	return h + "\n\n" + text
+}
+
 func (ls *liveSession) close() {
 	ls.mu.Lock()
 	first := !ls.closed
@@ -401,7 +423,7 @@ func (s *Service) runTurn(ctx context.Context, ls *liveSession, tr turnReq) {
 	rend := newTurnRender(s, ls)
 	done := ls.driver.RunTurn(ctx, agentproc.Turn{
 		SessionRef: ls.ref(),
-		Prompt:     tr.text,
+		Prompt:     ls.consumeHandoff(tr.text),
 		Workdir:    ls.workdir,
 		Effort:     ls.effort,
 		Name:       ls.name,

@@ -6,6 +6,24 @@ import (
 	"github.com/eunomie/quack/internal/agent"
 )
 
+func TestConsumeHandoff(t *testing.T) {
+	ls := &liveSession{}
+	ls.pendingHandoff = "HANDOFF"
+
+	if got := ls.consumeHandoff("hello"); got != "HANDOFF\n\nhello" {
+		t.Fatalf("first consume = %q, want prepend", got)
+	}
+	if got := ls.consumeHandoff("again"); got != "again" {
+		t.Fatalf("second consume = %q, want unchanged (cleared)", got)
+	}
+
+	ls2 := &liveSession{}
+	ls2.pendingHandoff = "ONLY"
+	if got := ls2.consumeHandoff(""); got != "ONLY" {
+		t.Fatalf("empty text consume = %q, want the handoff alone", got)
+	}
+}
+
 func newSwitchTestService() *Service {
 	svc := New(Config{StateDir: "/state"}, newFakeGit(), newFakeTmux(), newFakeReplier())
 	svc.cfg.Agents = map[string]agent.Agent{
