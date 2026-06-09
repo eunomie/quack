@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -59,6 +60,47 @@ func TestLoad(t *testing.T) {
 	a, ok := cfg.Agents["codex"]
 	if !ok || a.Command != "codex" || a.EffortTemplate != "--config model_reasoning_effort={effort}" {
 		t.Errorf("codex agent = %+v ok=%v", a, ok)
+	}
+}
+
+func TestLoad_IgnorePrefixesDefault(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.toml")
+	if err := os.WriteFile(path, []byte(sample), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("DISCORD_BOT_TOKEN", "tok")
+	t.Setenv("HOME", "/home/tester")
+
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if got := cfg.Discord.IgnorePrefixes; len(got) != 1 || got[0] != "_ " {
+		t.Errorf("IgnorePrefixes default = %q, want [\"_ \"]", got)
+	}
+}
+
+func TestLoad_IgnorePrefixesExplicitEmpty(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.toml")
+	// Insert `ignore_prefixes = []` into sample's existing [discord] block,
+	// just before the thread_auto_archive_minutes key.
+	cfgText := sample[:strings.Index(sample, "thread_auto_archive_minutes")] +
+		"ignore_prefixes = []\n" +
+		sample[strings.Index(sample, "thread_auto_archive_minutes"):]
+	if err := os.WriteFile(path, []byte(cfgText), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("DISCORD_BOT_TOKEN", "tok")
+	t.Setenv("HOME", "/home/tester")
+
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if cfg.Discord.IgnorePrefixes == nil || len(cfg.Discord.IgnorePrefixes) != 0 {
+		t.Errorf("IgnorePrefixes = %q, want explicit empty []", cfg.Discord.IgnorePrefixes)
 	}
 }
 

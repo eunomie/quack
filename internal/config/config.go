@@ -58,6 +58,7 @@ type Discord struct {
 	OwnerUserIDs             []string `toml:"owner_user_ids"`
 	GuestRoleID              string   `toml:"guest_role_id"`
 	GuestRoleIDs             []string `toml:"guest_role_ids"`
+	IgnorePrefixes           []string `toml:"ignore_prefixes"` // tracked-thread messages starting with one of these are kept out of the agent (nil => default ["_ "])
 }
 
 // UserIDs, GuildIDs, and ChannelIDs return the merged allowlist for each
@@ -137,6 +138,9 @@ func Load(path string) (*Config, error) {
 	}
 	if cfg.Discord.ThreadAutoArchiveMinutes == 0 {
 		cfg.Discord.ThreadAutoArchiveMinutes = 10080
+	}
+	if cfg.Discord.IgnorePrefixes == nil {
+		cfg.Discord.IgnorePrefixes = []string{"_ "}
 	}
 	if cfg.Agents == nil {
 		cfg.Agents = map[string]agent.Agent{}
