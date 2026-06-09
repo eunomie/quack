@@ -1,6 +1,7 @@
 package session
 
 import (
+	"context"
 	"testing"
 
 	"github.com/eunomie/quack/internal/agent"
@@ -64,5 +65,31 @@ func TestMatchSwitch(t *testing.T) {
 					c.text, gotAgent, gotPrompt, gotOK, c.wantAgent, c.wantPrompt, c.wantOK)
 			}
 		})
+	}
+}
+
+func TestRunSummaryTurn(t *testing.T) {
+	d := &fakeDriver{turns: []scripted{
+		{texts: []string{"Here is the handoff. "}, tools: []string{"Read main.go"}, ref: "ignored"},
+	}}
+	svc, r := newHeadlessService(d)
+	ls := &liveSession{driver: d, workdir: "/wt", effort: "high", name: "demo", threadID: "thread-1"}
+
+	summary := svc.runSummaryTurn(context.Background(), ls, "sess-1")
+
+	if len(d.seen) != 1 {
+		t.Fatalf("driver saw %d turns, want 1", len(d.seen))
+	}
+	if d.seen[0].SessionRef != "sess-1" || d.seen[0].Workdir != "/wt" {
+		t.Errorf("summary turn = %+v, want resume sess-1 in /wt", d.seen[0])
+	}
+	if d.seen[0].Prompt != handoffPrompt {
+		t.Errorf("summary prompt = %q, want the handoff prompt", d.seen[0].Prompt)
+	}
+	if summary != "Here is the handoff." {
+		t.Errorf("summary = %q, want the trimmed assistant text", summary)
+	}
+	if !anyContains(r.posts, "Here is the handoff.") {
+		t.Errorf("summary not streamed to the thread: %v", r.posts)
 	}
 }
