@@ -181,3 +181,42 @@ func TestStripMention_BotRoleMention(t *testing.T) {
 		t.Errorf("got %+v", d)
 	}
 }
+
+// threadMsg builds a tracked-thread message: optional reply target and content.
+func threadMsg(content string, repliedToBot *bool) *discordgo.MessageCreate {
+	m := &discordgo.MessageCreate{Message: &discordgo.Message{Content: content}}
+	if repliedToBot != nil {
+		m.ReferencedMessage = &discordgo.Message{
+			Author: &discordgo.User{ID: "X", Bot: *repliedToBot},
+		}
+	}
+	return m
+}
+
+func TestIgnoredInThread(t *testing.T) {
+	yes, no := true, false
+	cases := []struct {
+		name     string
+		prefixes []string
+		content  string
+		reply    *bool // nil = not a reply, &true = reply to bot, &false = reply to human
+		want     bool
+	}{
+		{"plain text feeds", []string{"_ "}, "do the thing", nil, false},
+		{"reply to human dropped", []string{"_ "}, "side note", &no, true},
+		{"reply to bot feeds", []string{"_ "}, "and now this", &yes, false},
+		{"underscore-space prefix dropped", []string{"_ "}, "_ note to self", nil, true},
+		{"markdown italic feeds", []string{"_ "}, "_italic_ word", nil, false},
+		{"custom prefix respected", []string{"//"}, "// aside", nil, true},
+		{"empty prefixes disables prefix match", nil, "_ note", nil, false},
+		{"empty prefixes still drops reply to human", nil, "anything", &no, true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			b := &Bot{ignorePrefixes: tc.prefixes}
+			if got := b.ignoredInThread(nil, threadMsg(tc.content, tc.reply)); got != tc.want {
+				t.Errorf("ignoredInThread = %v, want %v", got, tc.want)
+			}
+		})
+	}
+}

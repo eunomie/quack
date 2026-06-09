@@ -19,6 +19,8 @@ type Bot struct {
 	svc     *session.Service
 	allowed Allow
 
+	ignorePrefixes []string // tracked-thread messages starting with one of these are dropped (side-chat)
+
 	mu        sync.Mutex
 	roleCache map[string]map[string]bool // guildID -> role IDs that address the bot
 }
@@ -186,6 +188,23 @@ func referencedMessage(s *discordgo.Session, m *discordgo.MessageCreate) *discor
 		return nil
 	}
 	return msg
+}
+
+// ignoredInThread reports whether a tracked-thread message is side-chat that
+// must not reach the agent: a reply to a non-bot user, or content starting with
+// a configured ignore prefix. Dropped messages get no reaction — the absence of
+// quack's 👀 marker is itself the signal that it wasn't forwarded.
+func (b *Bot) ignoredInThread(s *discordgo.Session, m *discordgo.MessageCreate) bool {
+	if ref := referencedMessage(s, m); ref != nil && ref.Author != nil && !ref.Author.Bot {
+		return true
+	}
+	content := strings.TrimSpace(m.Content)
+	for _, p := range b.ignorePrefixes {
+		if p != "" && strings.HasPrefix(content, p) {
+			return true
+		}
+	}
+	return false
 }
 
 // stopEmoji is the unicode reaction that halts a running session. It is also
