@@ -111,7 +111,7 @@ func main() {
 		ChannelIDs:   cfg.Discord.ChannelIDs(),
 		OwnerUserIDs: cfg.Discord.OwnerIDs(),
 		GuestRoleIDs: cfg.Discord.GuestRoles(),
-	}, func(r session.Replier) *session.Service {
+	}, cfg.Discord.IgnorePrefixes, func(r session.Replier) *session.Service {
 		svc = session.New(scfg, g, tx, r)
 		svc.UseDrivers(drivers)
 		svc.UseRunner(cmdexec.New())

@@ -38,15 +38,16 @@ type Allow struct {
 }
 
 // New builds a Bot. svcFor returns the orchestrator for a given Replier so the
-// Replier can be bound to this discordgo session.
-func New(token string, allowed Allow, svcFor func(session.Replier) *session.Service) (*Bot, error) {
+// Replier can be bound to this discordgo session. ignorePrefixes are content
+// prefixes that mark a tracked-thread message as side-chat (see ignoredInThread).
+func New(token string, allowed Allow, ignorePrefixes []string, svcFor func(session.Replier) *session.Service) (*Bot, error) {
 	s, err := discordgo.New("Bot " + token)
 	if err != nil {
 		return nil, err
 	}
 	s.Identify.Intents = discordgo.IntentsGuilds | discordgo.IntentsGuildMessages | discordgo.IntentMessageContent | discordgo.IntentsGuildMessageReactions
 
-	b := &Bot{s: s, allowed: allowed}
+	b := &Bot{s: s, allowed: allowed, ignorePrefixes: ignorePrefixes}
 	b.svc = svcFor(&replier{s: s})
 	s.AddHandler(b.onMessage)
 	s.AddHandler(b.onThreadUpdate)
@@ -72,6 +73,9 @@ func (b *Bot) onMessage(s *discordgo.Session, m *discordgo.MessageCreate) {
 	if b.svc.Tracked(m.ChannelID) {
 		role, ok := b.resolveRole(m.Author.ID, m.GuildID, m.ChannelID, memberRoleIDs(m.Member))
 		if !ok {
+			return
+		}
+		if b.ignoredInThread(s, m) {
 			return
 		}
 		caller := session.Caller{Role: role, UserID: m.Author.ID}
