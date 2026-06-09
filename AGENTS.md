@@ -183,6 +183,18 @@ resume-per-turn mode and parses its line-delimited JSON stream (`claude
 implement `Driver` (+ `SuggestName`), register it in the `main.go` driver switch,
 and add an `[agents.<name>]` block to config.
 
+**Permissions are permissive by default for both agents**, so worktrees (whose
+shared `.git` lives outside the workspace) and multi-repo tasks aren't blocked by
+the tool's own sandbox; restriction is meant to happen at the quack level (the
+`!` explicit grammar / allowlist), not the agent's sandbox. claude headless runs
+under `permission_mode=auto`; codex headless passes `--sandbox <mode>` where the
+mode defaults to `danger-full-access` (`agent.Sandbox()`), tightenable per-agent
+with `sandbox_mode = "workspace-write" | "read-only"`. The interactive (tmux)
+paths default to each tool's full-access flag via `Agent.interactiveArgs`
+(`--dangerously-skip-permissions` for claude,
+`--dangerously-bypass-approvals-and-sandbox` for codex), overridable with
+`interactive_args`.
+
 ### Session naming (`internal/session/names.go`)
 
 A *provisional* name is used for the early ack/thread (`<repo>-<token>`, or an
