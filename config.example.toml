@@ -40,6 +40,11 @@ allowed_guild_ids = ["YOUR_GUILD_ID", "ANOTHER_GUILD_ID"]
 # guest_role_id   = "GUEST_ROLE_ID"          # members of this role -> sandboxed guests
 # guest_role_ids  = ["GUEST_ROLE_1", "GUEST_ROLE_2"]  # (sandbox is inert unless set)
 thread_auto_archive_minutes = 10080 # Discord allows only 60, 1440, 4320, or 10080 (7 days)
+# Messages in a tracked thread that start with one of these prefixes are treated
+# as side-chat and never forwarded to the agent (no reaction). Replies to a
+# non-bot user are likewise ignored. Default when unset: ["_ "]. Set to [] to
+# disable prefix matching (the reply rule still applies).
+ignore_prefixes = ["_ "]
 
 [agents.claude]
 command         = "claude"

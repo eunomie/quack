@@ -92,6 +92,15 @@ Interfaces (defined consumer-side in `internal/session/service.go`) and their ad
    output, and never starts an agent turn. The directory is unambiguous because a
    headless session's `workdir` is fixed and each turn resets the agent's cwd to
    it. See `hack/designs/2026-06-05-fast-slash-commands.md`.
+
+   A message in a tracked thread that is **side-chat** is dropped before
+   `FeedThread` and never starts a turn: a Discord **reply to a non-bot user**
+   (replies to quack's own messages still feed — that's the conversation), or
+   content starting with one of `[discord].ignore_prefixes` (default `"_ "`,
+   chosen to avoid Markdown italics; `[]` disables it). Dropped messages get no
+   reaction, so the absence of quack's 👀 is the signal it wasn't forwarded
+   (`ignoredInThread` in `internal/discord/bot.go`). See
+   `hack/designs/2026-06-09-filter-thread-messages.md`.
 2. `Service.Handle` (`service.go`) — the spine: route the message (fluent infer by
    default, or the explicit `!` grammar) into a directive → resolve agent → open a
    Discord thread + post an ack → (if no explicit `name=`) ask the agent to suggest
