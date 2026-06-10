@@ -73,6 +73,22 @@ headless        = true
 switchable      = true
 # sandbox_mode  = "danger-full-access"  # codex `--sandbox` value for headless turns. Default (when unset) is danger-full-access — no codex sandbox, matching how claude is invoked — so worktree (shared .git lives outside the workspace) and multi-repo tasks aren't blocked. Tighten with "workspace-write" or "read-only" if you want codex to restrict itself; otherwise restrict at the quack level (the `!` explicit grammar / allowlist). Interactive (no-headless) codex defaults to --dangerously-bypass-approvals-and-sandbox via interactive_args; override with interactive_args = "..." (or "" to disable).
 
+# Claude on its most powerful model (claude-fable-5). Selected with the bare
+# `fable` keyword in the `!` grammar (e.g. `@quack ! fable owner/repo`), as a
+# /fable mid-thread switch (switchable below), or when the fluent infer step
+# routes a request that explicitly asks for fable. Same shape as [agents.claude]
+# but pinned to the fable model. model is claude-only (codex ignores it).
+[agents.fable]
+command         = "claude"
+model           = "claude-fable-5"
+effort_template = "--effort {effort}"
+name_template   = "-n {name}"
+resume_template = "--resume {session}"
+default_effort  = "xhigh"
+headless        = true
+switchable      = true
+permission_mode = "auto"
+
 # A dedicated agent for the fluent infer one-shot, on a faster model — point
 # infer_agent at it (infer_agent = "infer") to speed up routing while the
 # working agent keeps its own model. Needs headless = true so a driver is built;

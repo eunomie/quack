@@ -49,6 +49,15 @@ func TestParse_BareKeywords(t *testing.T) {
 	if d2.Agent != "claude" || !d2.Headless || d2.Target != "dagger/dagger" {
 		t.Errorf("got %+v", d2)
 	}
+
+	// bare `fable` keyword selects the fable agent (Claude's most powerful model)
+	d3, err := Parse("fable dagger/dagger\nGo.")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if d3.Agent != "fable" || d3.Target != "dagger/dagger" {
+		t.Errorf("got %+v", d3)
+	}
 }
 
 func TestParse_NoWorktree(t *testing.T) {

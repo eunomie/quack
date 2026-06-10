@@ -97,7 +97,7 @@ Schema (all fields required):
 - target: a GitHub repo "owner/repo", an absolute or ~ path, the literal "temp-dir", or "" when the request names no repo/dir.
 - base: base branch to start from, or "" for the repo default.
 - worktree: true to work in an isolated worktree (default); false only if the user explicitly wants to work directly in the checkout.
-- agent: "claude", "codex", or "" for the default.
+- agent: "claude", "codex", "fable", or "" for the default. "fable" runs Claude on its most powerful model (claude-fable-5); pick it only when the user explicitly asks for fable or "the most powerful/best model".
 - effort: one of "low", "medium", "high", "xhigh", or "" for the default; pick higher for harder tasks.
 - name: a short lowercase kebab-case branch name (2-4 words) describing the task.
 - headless: true (default) for a Discord conversation; false only if the user explicitly asks for an interactive or tmux session.

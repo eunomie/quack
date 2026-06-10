@@ -25,7 +25,7 @@ type UsageError struct{ Msg string }
 
 func (e *UsageError) Error() string { return e.Msg }
 
-const usage = "usage: one line => the whole message is the prompt (runs in the scratch dir).\nmulti-line => @quack [repo-or-path|temp-dir] [codex] [no-headless] [no-wt] [effort=] [name=] [base=]\n<prompt on the following line(s)>"
+const usage = "usage: one line => the whole message is the prompt (runs in the scratch dir).\nmulti-line => @quack [repo-or-path|temp-dir] [claude|codex|fable] [no-headless] [no-wt] [effort=] [name=] [base=]\n<prompt on the following line(s)>"
 
 // Parse parses content that has already had the bot mention stripped.
 //
@@ -35,7 +35,7 @@ const usage = "usage: one line => the whole message is the prompt (runs in the s
 // Otherwise line 1 is the directive line (it may be empty) and everything after
 // the first newline is the prompt. The directive line holds, in any order: an
 // optional target (repo ref, path, or the literal `temp-dir`) as the first
-// non-flag/non-keyword token; bare keywords (`codex`/`claude`,
+// non-flag/non-keyword token; bare keywords (`codex`/`claude`/`fable`,
 // `no-headless`/`headless`); and key=value flags (agent=, effort=, name=, base=,
 // headless=). Headless defaults to true.
 func Parse(content string) (*Directive, error) {
@@ -76,7 +76,7 @@ func Parse(content string) (*Directive, error) {
 		}
 
 		switch tok {
-		case "codex", "claude":
+		case "codex", "claude", "fable":
 			d.Agent = tok
 		case "no-headless":
 			d.Headless = false

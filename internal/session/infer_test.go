@@ -82,6 +82,18 @@ func TestMapInferred_DefaultsWhenOmitted(t *testing.T) {
 	}
 }
 
+func TestMapInferred_FableAgent(t *testing.T) {
+	// When a fable agent is configured, the infer step may route to it.
+	agents := map[string]agent.Agent{
+		"claude": {Command: "claude"},
+		"fable":  {Command: "claude", Model: "claude-fable-5"},
+	}
+	dir := mapInferred(inferred{Agent: "fable"}, agents, "use the most powerful model")
+	if dir.Agent != "fable" {
+		t.Errorf("configured fable agent should pass through, got %q", dir.Agent)
+	}
+}
+
 func TestParseInferred(t *testing.T) {
 	if _, err := parseInferred("not json"); err == nil {
 		t.Errorf("expected error for non-JSON output")
