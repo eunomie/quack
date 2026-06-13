@@ -25,13 +25,18 @@ type Codex struct {
 func (d Codex) args(t Turn) []string {
 	args := []string{"exec"}
 	args = append(args, d.sandboxArgs()...)
+	// Codex has no --append-system-prompt, so the standing Discord-formatting
+	// guidance rides in front of every turn's instructions instead. args() runs
+	// per turn (including resume), so it holds across the session and reaches
+	// sessions that predate it.
+	prompt := discordFormatNudge + "\n\n" + t.Prompt
 	if t.SessionRef != "" {
-		args = append(args, "resume", "--json", t.SessionRef, t.Prompt)
+		args = append(args, "resume", "--json", t.SessionRef, prompt)
 		return args
 	} else if t.Effort != "" && d.EffortTemplate != "" {
 		args = append(args, strings.Fields(strings.ReplaceAll(d.EffortTemplate, "{effort}", t.Effort))...)
 	}
-	return append(args, "--json", t.Prompt)
+	return append(args, "--json", prompt)
 }
 
 // sandboxArgs returns the --sandbox flag (placed right after `exec`, before any

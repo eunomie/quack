@@ -24,19 +24,28 @@ func TestClaudeStreamArgs(t *testing.T) {
 		"--permission-mode plan", "--allowedTools Read,Bash",
 		"--settings /tmp/s.json", "--model claude-x",
 		"--effort high", "--name triage",
+		"--append-system-prompt",
 	} {
 		if !strings.Contains(fresh, want) {
 			t.Errorf("fresh args missing %q in: %s", want, fresh)
 		}
 	}
+	if !strings.Contains(fresh, discordFormatNudge) {
+		t.Errorf("fresh args missing the Discord format nudge: %s", fresh)
+	}
 	if strings.Contains(fresh, "--resume") {
 		t.Errorf("fresh session must not resume: %s", fresh)
 	}
 
-	// A resumed session resumes by ref and drops the first-turn name/effort.
+	// A resumed session resumes by ref and drops the first-turn name/effort, but
+	// still carries the standing Discord format nudge so it reaches sessions that
+	// predate it.
 	res := strings.Join(d.streamArgs(OpenOpts{SessionRef: "sess-42"}), " ")
 	if !strings.Contains(res, "--resume sess-42") {
 		t.Errorf("resume args missing --resume: %s", res)
+	}
+	if !strings.Contains(res, discordFormatNudge) {
+		t.Errorf("resume args missing the Discord format nudge: %s", res)
 	}
 	if strings.Contains(res, "--name") || strings.Contains(res, "--effort") {
 		t.Errorf("resumed session must not re-apply name/effort: %s", res)

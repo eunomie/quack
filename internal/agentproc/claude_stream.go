@@ -34,6 +34,10 @@ func (d Claude) streamArgs(o OpenOpts) []string {
 	if d.Model != "" {
 		a = append(a, "--model", d.Model)
 	}
+	// Standing reminder that replies render in Discord, not full Markdown.
+	// Unconditional and ahead of the resume return, so it applies on every turn
+	// (including --resume) and reaches sessions that predate it.
+	a = append(a, "--append-system-prompt", discordFormatNudge)
 	// Owner-answered questions: expose quack's ask_user MCP tool, disallow the
 	// UI-less native AskUserQuestion, and nudge the model toward the MCP tool.
 	if d.AskMCPURL != "" && o.AskToken != "" {
