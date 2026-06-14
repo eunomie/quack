@@ -110,12 +110,11 @@ func (b *Bot) onMessage(s *discordgo.Session, m *discordgo.MessageCreate) {
 		if b.svc.SwitchAgent(context.Background(), m.ChannelID, m.ChannelID, m.ID, content, atts, caller) {
 			return
 		}
-		// While the agent is blocked on an ask_user question, a text reply is the
-		// answer, not a new turn. Empty content (an attachment-only message) falls
-		// through to FeedThread so it can still interject.
-		if content != "" && b.svc.AnswerAskText(m.ChannelID, content) {
-			return
-		}
+		// A reply is just the next turn — and it answers any pending ask_user
+		// question, since the agent ended its turn after asking. Clear the pending
+		// marker so a late number-reaction on the now-answered question can't
+		// re-inject a duplicate answer; the reply itself flows on as the next turn.
+		b.svc.ClearPendingAsk(m.ChannelID)
 		b.svc.FeedThread(context.Background(), m.ChannelID, m.ChannelID, m.ID, content, atts, caller)
 		return
 	}

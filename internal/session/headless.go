@@ -53,9 +53,10 @@ type liveSession struct {
 	// Service's hmu (claimed alongside the s.sessions lookup), not ls.mu.
 	switching bool
 
-	// pending is the in-flight owner question (ask_user), if any. It is set by the
-	// MCP handler goroutine and resolved by an owner reaction/reply, so it is
-	// guarded by askMu (separate from mu).
+	// pending is the in-flight owner question (ask_user), if any: set when the MCP
+	// handler posts the question and cleared when the owner answers or the session
+	// ends. It only maps a number reaction to its option text — a plain reply is
+	// the next turn regardless. Guarded by askMu (separate from mu).
 	askMu   sync.Mutex
 	pending *pendingAsk
 

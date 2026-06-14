@@ -12,7 +12,6 @@ import (
 	"path/filepath"
 	"strings"
 	"syscall"
-	"time"
 
 	"github.com/eunomie/quack/internal/agentproc"
 	"github.com/eunomie/quack/internal/askmcp"
@@ -50,7 +49,6 @@ func main() {
 		InferHistoryLimit:    cfg.InferHistoryLimit,
 		StateDir:             cfg.StateDir,
 		ThreadAutoArchiveMin: cfg.Discord.ThreadAutoArchiveMinutes,
-		AskTimeout:           time.Duration(cfg.AskTimeoutMinutes) * time.Minute,
 		Agents:               cfg.Agents,
 	}
 	for _, fc := range cfg.FastCommands {

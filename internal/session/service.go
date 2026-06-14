@@ -167,7 +167,6 @@ type Config struct {
 	InferHistoryLimit    int    // recent Discord messages fed to the infer agent
 	StateDir             string
 	ThreadAutoArchiveMin int
-	AskTimeout           time.Duration // how long an ask_user waits for the owner (0 => default)
 	Agents               map[string]agent.Agent
 	// FastCommands are trigger→argv launchers run directly (bypassing the agent)
 	// when their trigger is the first word of a tracked-thread message.

@@ -28,7 +28,9 @@ type Claude struct {
 	// feature). When set on a streaming session, the per-session OpenOpts.AskToken
 	// is appended as ?s=<token> so the server can tell which session is asking; the
 	// native AskUserQuestion is disallowed and a system-prompt nudge steers the
-	// model to the MCP tool, so a headless question blocks on the owner's real answer.
+	// model to the MCP tool. The tool posts the question to the thread and returns
+	// at once (the owner's answer arrives later as a new turn), so the call is fast
+	// and needs no special MCP tool-call timeout.
 	AskMCPURL string
 }
 
@@ -37,8 +39,10 @@ type Claude struct {
 // no UI in headless mode).
 const askNudge = "You are running headless in a Discord thread. When you need a decision only the " +
 	"owner can make — a design choice, a yes/no, picking between options — call the " +
-	"mcp__quack__ask_user tool and wait for their answer instead of guessing or proceeding " +
-	"on your own. It posts the question to the thread and blocks until they reply."
+	"mcp__quack__ask_user tool instead of guessing or proceeding on your own. It posts the " +
+	"question to the thread and returns immediately: end your turn after calling it and wait. " +
+	"The owner may take a while (possibly hours); their answer arrives as a new message you " +
+	"continue from. Do not act on a decision they haven't made."
 
 func (d Claude) args(t Turn) []string {
 	mode := d.PermissionMode

@@ -5,42 +5,40 @@ import (
 	"errors"
 	"fmt"
 	"strings"
-	"sync"
-	"time"
 
 	"github.com/eunomie/quack/internal/askmcp"
 )
 
-// defaultAskTimeout bounds how long an ask_user waits for the owner before the
-// agent is told to proceed on its own — preserving the "never hang forever"
-// property while making the autonomous fallback explicit, not silent.
-const defaultAskTimeout = 10 * time.Minute
-
-// askFallbackNote is returned to the agent when the owner doesn't answer in time.
-const askFallbackNote = "The owner didn't answer in time — proceed using your best judgement, " +
-	"and say which choice you made so they can correct you."
+// askWaitNote is the tool result returned the instant ask_user posts its
+// question. The call deliberately does NOT block on the answer: the owner may
+// take minutes or hours to reply, and parking the streaming process mid-turn for
+// that long would hold the MCP connection open, leave the turn un-interruptible
+// (a pending tool call), and lose the question on any daemon restart. Instead the
+// agent ends its turn, and the owner's reply arrives later as an ordinary new
+// turn it continues from. The note leans hard on "stop and wait" because nothing
+// mechanically prevents the agent from proceeding once the call returns.
+const askWaitNote = "Your question has been posted to the Discord thread. End your turn now — " +
+	"do not take any further action, and do not guess at the answer. The owner may take a while " +
+	"to reply (possibly hours). When they do, their answer arrives as a new message in this " +
+	"thread and you continue from there. Stop here and wait."
 
 // numberEmojis are the one-tap option reactions, in order. The owner can react
 // with one to pick an option, or reply with text to answer free-form.
 var numberEmojis = []string{"1️⃣", "2️⃣", "3️⃣", "4️⃣", "5️⃣", "6️⃣", "7️⃣", "8️⃣", "9️⃣", "🔟"}
 
-// pendingAsk is an in-flight owner question. The MCP handler goroutine blocks on
-// reply/done while an owner reaction or reply (routed by the bot) resolves it.
+// pendingAsk marks an in-flight owner question (ask_user). It exists only so a
+// number reaction on the question message can be mapped back to its option text;
+// the answer itself enters as an ordinary turn, so there is no goroutine to wake.
 type pendingAsk struct {
 	options []string
 	msgID   string // the question message, matched by a number reaction
-	reply   chan string
-	done    chan struct{}
-	once    sync.Once
 }
 
-func (p *pendingAsk) cancel() { p.once.Do(func() { close(p.done) }) }
-
-var errAskAbandoned = errors.New("question abandoned (session ended)")
-
 // ResolveAsk is the askmcp.AskFunc: it maps a tool call's session token back to a
-// live session and blocks on the owner's answer. Unknown token → error (reported
-// to the agent as a tool error).
+// live session, posts the question to that session's thread, and returns
+// immediately telling the agent to end its turn. The owner's answer is delivered
+// later as a new turn (AnswerAskReaction for a number tap, or a plain reply that
+// flows through FeedThread). Unknown token → error (reported as a tool error).
 func (s *Service) ResolveAsk(ctx context.Context, token string, q askmcp.Question) (askmcp.Answer, error) {
 	s.hmu.Lock()
 	ls, ok := s.askByToken[token]
@@ -48,13 +46,14 @@ func (s *Service) ResolveAsk(ctx context.Context, token string, q askmcp.Questio
 	if !ok {
 		return askmcp.Answer{}, errors.New("no live session for this token")
 	}
-	return s.askOwner(ctx, ls, q)
+	s.postOwnerQuestion(ctx, ls, q)
+	return askmcp.Answer{Note: askWaitNote}, nil
 }
 
-// askOwner posts the question to the session's thread (with one-tap number
-// reactions) and blocks until the owner answers, the session ends, the caller's
-// context is cancelled, or the timeout elapses.
-func (s *Service) askOwner(ctx context.Context, ls *liveSession, q askmcp.Question) (askmcp.Answer, error) {
+// postOwnerQuestion posts the question to the session's thread (with one-tap
+// number reactions) and records it as pending so a number reaction resolves to
+// its option text.
+func (s *Service) postOwnerQuestion(ctx context.Context, ls *liveSession, q askmcp.Question) {
 	options := q.Options
 	if len(options) > len(numberEmojis) {
 		options = options[:len(numberEmojis)]
@@ -65,42 +64,9 @@ func (s *Service) askOwner(ctx context.Context, ls *liveSession, q askmcp.Questi
 		_ = s.reply.React(ctx, ls.threadID, msgID, numberEmojis[i])
 	}
 
-	p := &pendingAsk{
-		options: options,
-		msgID:   msgID,
-		reply:   make(chan string, 1),
-		done:    make(chan struct{}),
-	}
 	ls.askMu.Lock()
-	ls.pending = p
+	ls.pending = &pendingAsk{options: options, msgID: msgID}
 	ls.askMu.Unlock()
-	defer func() {
-		ls.askMu.Lock()
-		if ls.pending == p {
-			ls.pending = nil
-		}
-		ls.askMu.Unlock()
-	}()
-
-	timeout := s.cfg.AskTimeout
-	if timeout <= 0 {
-		timeout = defaultAskTimeout
-	}
-	timer := time.NewTimer(timeout)
-	defer timer.Stop()
-
-	select {
-	case choice := <-p.reply:
-		_, _ = s.reply.PostSilent(ctx, ls.threadID, mutedText("✅ got it: "+choice))
-		return askmcp.Answer{Choice: choice}, nil
-	case <-p.done:
-		return askmcp.Answer{}, errAskAbandoned
-	case <-ctx.Done():
-		return askmcp.Answer{}, ctx.Err()
-	case <-timer.C:
-		_, _ = s.reply.PostSilent(ctx, ls.threadID, mutedText("⏳ no answer — proceeding on my own"))
-		return askmcp.Answer{Note: askFallbackNote}, nil
-	}
 }
 
 // formatQuestion renders the owner-facing question: optional bold header, the
@@ -123,8 +89,9 @@ func formatQuestion(header, text string, options []string) string {
 }
 
 // HasPendingAsk reports whether the session is currently waiting on an owner
-// answer, so the bot routes the next message/reaction to the answer rather than
-// starting a new turn.
+// answer. The streaming run loop treats a reply as the next turn regardless, so
+// this is informational (and used in tests); the pending marker's real job is to
+// route a number reaction to its option text.
 func (s *Service) HasPendingAsk(threadID string) bool {
 	s.hmu.Lock()
 	ls, ok := s.sessions[threadID]
@@ -137,22 +104,24 @@ func (s *Service) HasPendingAsk(threadID string) bool {
 	return ls.pending != nil
 }
 
-// AnswerAskText delivers a free-form reply as the answer to a pending question.
-// Returns false if there is no pending question (the caller then treats the
-// message as a normal turn).
-func (s *Service) AnswerAskText(threadID, text string) bool {
+// ClearPendingAsk drops any pending question for the thread. Called when the
+// owner replies in text: the reply already flows on as the next turn, and
+// clearing the marker stops a late number-reaction on the now-answered question
+// from re-injecting a duplicate answer. No-op when nothing is pending.
+func (s *Service) ClearPendingAsk(threadID string) {
 	s.hmu.Lock()
 	ls, ok := s.sessions[threadID]
 	s.hmu.Unlock()
-	if !ok {
-		return false
+	if ok {
+		ls.cancelPending()
 	}
-	return ls.deliverAsk(text)
 }
 
-// AnswerAskReaction delivers a number-reaction choice as the answer, but only
-// when it lands on the pending question's message and maps to an offered option.
-// Returns false otherwise (the reaction is then handled normally).
+// AnswerAskReaction treats a number reaction on the pending question's message as
+// the owner's answer: it maps the emoji to an offered option, clears the pending
+// marker, and feeds that choice back as a new turn the agent continues from.
+// Returns false when the reaction isn't on the pending question or isn't an
+// offered option (the bot then ignores it as an ordinary reaction).
 func (s *Service) AnswerAskReaction(threadID, messageID, emoji string) bool {
 	s.hmu.Lock()
 	ls, ok := s.sessions[threadID]
@@ -170,35 +139,21 @@ func (s *Service) AnswerAskReaction(threadID, messageID, emoji string) bool {
 	if idx < 0 || idx >= len(p.options) {
 		return false
 	}
-	return ls.deliverAsk(p.options[idx])
+	choice := p.options[idx]
+	ls.cancelPending()
+	// Feed the choice as a new turn, attributed to the question message (a reaction
+	// has no message of its own). The agent's preceding ask_user is the immediately
+	// prior context, so the bare option text reads as the owner's answer.
+	ls.enqueue(turnReq{channelID: threadID, messageID: messageID, text: choice})
+	return true
 }
 
-// deliverAsk hands a choice to the in-flight question (non-blocking; a second
-// answer is dropped). Returns false if no question is pending.
-func (ls *liveSession) deliverAsk(choice string) bool {
-	ls.askMu.Lock()
-	p := ls.pending
-	ls.askMu.Unlock()
-	if p == nil {
-		return false
-	}
-	select {
-	case p.reply <- choice:
-		return true
-	default:
-		return false
-	}
-}
-
-// cancelPending abandons any in-flight question so its blocked MCP call returns
-// instead of hanging when the session ends.
+// cancelPending drops any in-flight question marker. Called when the session ends
+// or switches agents, and when an answer is delivered.
 func (ls *liveSession) cancelPending() {
 	ls.askMu.Lock()
-	p := ls.pending
+	ls.pending = nil
 	ls.askMu.Unlock()
-	if p != nil {
-		p.cancel()
-	}
 }
 
 // emojiIndex maps a number reaction to a zero-based option index, or -1 if it
