@@ -72,6 +72,10 @@ func (r *replier) Unreact(ctx context.Context, channelID, messageID, emoji strin
 	return r.s.MessageReactionRemove(channelID, messageID, emoji, "@me")
 }
 
+func (r *replier) Typing(ctx context.Context, channelID string) error {
+	return r.s.ChannelTyping(channelID)
+}
+
 // RecentMessages returns up to limit messages before beforeID, oldest-first.
 func (r *replier) RecentMessages(ctx context.Context, channelID, beforeID string, limit int) ([]session.Message, error) {
 	if limit <= 0 {

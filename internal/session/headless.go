@@ -79,6 +79,11 @@ type liveSession struct {
 	// (resuming by ref) if the process dies. nil for the per-turn (codex) path.
 	sess agentproc.Session
 
+	// typing keeps Discord's "typing…" indicator alive while a turn is in flight.
+	// Owned by the stream loop goroutine: started when a burst begins, stopped when
+	// the inflight queue drains. nil when idle / for the per-turn (codex) path.
+	typing *typingPump
+
 	queue  chan turnReq
 	done   chan struct{}
 	stop   chan struct{}

@@ -148,6 +148,27 @@ func TestStream_FirstTurnRendersAndPersists(t *testing.T) {
 	}
 }
 
+// While a turn is in flight the bot shows as "typing…": the pump triggers the
+// indicator immediately and keeps it alive until the burst drains.
+func TestStream_TypingWhileWorking(t *testing.T) {
+	sess := newFakeStreamSession("sess-1")
+	d := newFakeStreamDriver(sess)
+	svc, r := newStreamService(d)
+
+	svc.startHeadless(context.Background(), "claude", "thread-1", "/wt", "", "demo", "",
+		RoleOwner, nil, "owner", turnReq{channelID: "c", messageID: "m1", text: "work"})
+	<-d.opened
+
+	// The indicator fires as soon as the turn begins (before any answer is posted).
+	waitFor(t, "typing indicator", func() bool { return r.typingCount() >= 1 })
+
+	// Finishing the turn drains the burst; the pump is stopped via advanceRender
+	// (the stop path is loop-owned, so it isn't safe to read ls.typing here).
+	sess.emit(agentproc.AssistantText{Text: "done"})
+	sess.emit(agentproc.TurnComplete{})
+	svc.waitIdle("thread-1")
+}
+
 // The headline feature: a message sent while a turn is in flight interrupts it and
 // is processed as the next turn.
 func TestStream_MidTurnInterjection(t *testing.T) {

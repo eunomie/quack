@@ -115,6 +115,7 @@ type fakeReplier struct {
 	archived  []string // threadIDs closed via ArchiveThread
 	reacts    []string // "channel|message|emoji"
 	unreacts  []string // "channel|message|emoji"
+	typings   int      // count of Typing() triggers
 	nextID    int
 	recent    []Message // returned by RecentMessages
 	recentErr error
@@ -180,6 +181,17 @@ func (f *fakeReplier) Unreact(ctx context.Context, channelID, messageID, emoji s
 	defer f.mu.Unlock()
 	f.unreacts = append(f.unreacts, channelID+"|"+messageID+"|"+emoji)
 	return nil
+}
+func (f *fakeReplier) Typing(ctx context.Context, channelID string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.typings++
+	return nil
+}
+func (f *fakeReplier) typingCount() int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.typings
 }
 
 func (f *fakeReplier) RecentMessages(ctx context.Context, channelID, beforeID string, limit int) ([]Message, error) {
