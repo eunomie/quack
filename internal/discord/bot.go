@@ -35,6 +35,12 @@ type Allow struct {
 	ChannelIDs   []string // empty = any channel in the guild
 	OwnerUserIDs []string // explicit owners; empty = no owners (NOT "any")
 	GuestRoleIDs []string // Discord role ids whose members are guests
+
+	// TrustedChannelIDs are the channels where the owner runs unsandboxed by
+	// default. Empty => the feature is inert (the owner's sandbox default is
+	// unchanged everywhere). Must be within ChannelIDs to take effect, since the
+	// channel allowlist gates first.
+	TrustedChannelIDs []string
 }
 
 // New builds a Bot. svcFor returns the orchestrator for a given Replier so the
@@ -173,6 +179,10 @@ func (b *Bot) onMessage(s *discordgo.Session, m *discordgo.MessageCreate) {
 		InThread:    inThread,
 		ThreadName:  threadName,
 		Role:        role,
+		// The channel policy decides an owner's sandbox default; resolved against
+		// the same channel used for authorization (the parent for an in-thread
+		// mention). Irrelevant for guests, who are sandboxed by role.
+		DefaultSandbox: b.ownerSandboxDefault(authChannel),
 	}
 	go b.svc.Handle(context.Background(), req)
 }
@@ -292,17 +302,19 @@ func (b *Bot) onThreadUpdate(s *discordgo.Session, t *discordgo.ThreadUpdate) {
 	}
 }
 
-// resolveRole decides a user's trust level. Owners (explicit id match) get full
-// access. Otherwise a member holding a configured guest role, inside an allowed
-// guild+channel, is a guest. ok=false => the request is rejected.
+// resolveRole decides a user's trust level. The guild+channel allowlist gates
+// everyone, including the owner: outside an allowed channel the bot ignores the
+// message (an empty list means "any"). Within it, an explicit owner-id match is
+// an owner; otherwise a member holding a configured guest role is a guest.
+// ok=false => the request is rejected.
 func (b *Bot) resolveRole(userID, guildID, channelID string, memberRoles []string) (session.Role, bool) {
+	if !allows(b.allowed.GuildIDs, guildID) || !allows(b.allowed.ChannelIDs, channelID) {
+		return 0, false
+	}
 	for _, id := range b.allowed.OwnerUserIDs {
 		if id == userID {
 			return session.RoleOwner, true
 		}
-	}
-	if !allows(b.allowed.GuildIDs, guildID) || !allows(b.allowed.ChannelIDs, channelID) {
-		return 0, false
 	}
 	for _, want := range b.allowed.GuestRoleIDs {
 		for _, have := range memberRoles {
@@ -312,6 +324,22 @@ func (b *Bot) resolveRole(userID, guildID, channelID string, memberRoles []strin
 		}
 	}
 	return 0, false
+}
+
+// ownerSandboxDefault reports whether an owner request in channelID must default
+// to a sandbox. The feature is inert (false everywhere) until trusted channels
+// are configured; once configured, only the trusted channels give the owner an
+// unsandboxed default. Guests are sandboxed by role regardless of this.
+func (b *Bot) ownerSandboxDefault(channelID string) bool {
+	if len(b.allowed.TrustedChannelIDs) == 0 {
+		return false
+	}
+	for _, id := range b.allowed.TrustedChannelIDs {
+		if id == channelID {
+			return false
+		}
+	}
+	return true
 }
 
 // memberRoleIDs returns the author's guild role ids (nil-safe).

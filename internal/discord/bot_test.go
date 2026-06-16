@@ -38,6 +38,40 @@ func TestResolveRole(t *testing.T) {
 	}
 }
 
+// The channel allowlist now gates the owner too: when allowed_channel_ids is
+// set, the bot ignores the owner outside those channels (an empty list still
+// means "any channel").
+func TestResolveRole_OwnerGatedByChannel(t *testing.T) {
+	b := &Bot{allowed: Allow{OwnerUserIDs: []string{"owner"}, ChannelIDs: []string{"c1"}}}
+	if role, ok := b.resolveRole("owner", "g", "c1", nil); !ok || role != session.RoleOwner {
+		t.Errorf("owner in an allowed channel should authorize, got role=%v ok=%v", role, ok)
+	}
+	if _, ok := b.resolveRole("owner", "g", "c2", nil); ok {
+		t.Error("owner outside the channel allowlist must be rejected")
+	}
+	// With no channel allowlist, the owner authorizes anywhere.
+	any := &Bot{allowed: Allow{OwnerUserIDs: []string{"owner"}}}
+	if _, ok := any.resolveRole("owner", "g", "anywhere", nil); !ok {
+		t.Error("owner should authorize in any channel when no channel allowlist is set")
+	}
+}
+
+// ownerSandboxDefault is inert until trusted channels are configured; once set,
+// only the trusted channels give the owner an unsandboxed default.
+func TestOwnerSandboxDefault(t *testing.T) {
+	off := &Bot{allowed: Allow{}}
+	if off.ownerSandboxDefault("any") {
+		t.Error("no trusted channels => owner default must be unsandboxed (feature inert)")
+	}
+	b := &Bot{allowed: Allow{TrustedChannelIDs: []string{"trusted"}}}
+	if b.ownerSandboxDefault("trusted") {
+		t.Error("owner in a trusted channel must default to unsandboxed")
+	}
+	if !b.ownerSandboxDefault("other") {
+		t.Error("owner outside the trusted channels must default to sandboxed")
+	}
+}
+
 func msg(mentions []string, roles []string) *discordgo.MessageCreate {
 	var users []*discordgo.User
 	for _, id := range mentions {

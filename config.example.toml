@@ -22,21 +22,31 @@ name_agent     = "claude"     # agent used to auto-name sessions (best summarize
 # Two trust levels (see the [guest] block below and
 # hack/designs/2026-06-05-multi-user-sandbox-hardening.md):
 #
-#   OWNER  — full host access, exactly the original behavior. Identified by an
-#            explicit user id (owner_user_id(s)). The legacy allowed_user_id(s)
-#            also count as owners, so an existing single-user config is unchanged.
+#   OWNER  — full host access. Identified by an explicit user id
+#            (owner_user_id(s)). The legacy allowed_user_id(s) also count as
+#            owners, so an existing single-user config is unchanged. By default an
+#            owner runs unsandboxed; see trusted_channel_ids below to scope that.
 #   GUEST  — confined to a per-session Docker sandbox (forced headless, repo
-#            targets only, allow-listed egress, can only touch their own
-#            sessions). Identified by holding a configured Discord role
-#            (guest_role_id(s)), within an allowed guild/channel.
+#            targets only, allow-listed egress). Identified by holding a
+#            configured Discord role (guest_role_id(s)), within an allowed
+#            guild/channel.
 #
 # A user who is neither an owner nor a guest-role holder is rejected. An empty
 # owner list does NOT mean "any user" — owners must be listed explicitly.
+#
+# Interaction: a NON-sandboxed session is private to its creator — only the user
+# who started it may talk to it (other users, even other owners, are ignored). A
+# SANDBOXED session is shared — any authorized user may interact with it
+# (multi-user).
 allowed_user_id   = "YOUR_DISCORD_USER_ID"   # legacy: still treated as an OWNER
 # owner_user_id   = "YOUR_DISCORD_USER_ID"   # full-access owner(s)
 # owner_user_ids  = ["OWNER_1", "OWNER_2"]
 allowed_guild_ids = ["YOUR_GUILD_ID", "ANOTHER_GUILD_ID"]
-# allowed_channel_ids = ["OPTIONAL_CHANNEL_ID"]
+# allowed_channel_ids = ["OPTIONAL_CHANNEL_ID"]  # if set, the bot ignores every other channel (owners included)
+# trusted_channel_ids = ["OWNER_CHANNEL_ID"]     # channels where the OWNER runs UNSANDBOXED by default.
+#                                                # Must be within allowed_channel_ids (it gates first). Empty =>
+#                                                # feature inert (owner unsandboxed everywhere, as before). When
+#                                                # set, owners are sandboxed by default on every other channel.
 # guest_role_id   = "GUEST_ROLE_ID"          # members of this role -> sandboxed guests
 # guest_role_ids  = ["GUEST_ROLE_1", "GUEST_ROLE_2"]  # (sandbox is inert unless set)
 thread_auto_archive_minutes = 10080 # Discord allows only 60, 1440, 4320, or 10080 (7 days)
