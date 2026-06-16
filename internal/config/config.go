@@ -53,6 +53,8 @@ type Discord struct {
 	AllowedGuildIDs          []string `toml:"allowed_guild_ids"`
 	AllowedChannelID         string   `toml:"allowed_channel_id"`
 	AllowedChannelIDs        []string `toml:"allowed_channel_ids"`
+	TrustedChannelID         string   `toml:"trusted_channel_id"`  // channel(s) where the owner runs unsandboxed
+	TrustedChannelIDs        []string `toml:"trusted_channel_ids"` // (empty => feature inert; owner sandbox default unchanged)
 	ThreadAutoArchiveMinutes int      `toml:"thread_auto_archive_minutes"`
 	OwnerUserID              string   `toml:"owner_user_id"`
 	OwnerUserIDs             []string `toml:"owner_user_ids"`
@@ -75,6 +77,14 @@ func (d Discord) OwnerIDs() []string {
 
 // GuestRoles are the Discord role ids whose members get the sandbox.
 func (d Discord) GuestRoles() []string { return mergeIDs(d.GuestRoleID, d.GuestRoleIDs) }
+
+// TrustedChannels are the channels where the owner runs unsandboxed by default.
+// Empty means the trusted-channel feature is inert (owner sandbox default
+// unchanged). Named to avoid colliding with the TrustedChannelIDs field, as
+// AllowedChannelIDs/ChannelIDs do.
+func (d Discord) TrustedChannels() []string {
+	return mergeIDs(d.TrustedChannelID, d.TrustedChannelIDs)
+}
 
 // mergeIDs combines a singular id with a list, dropping empties.
 func mergeIDs(single string, many []string) []string {

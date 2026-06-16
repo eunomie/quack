@@ -202,6 +202,24 @@ func TestDiscordAllowlistMerge(t *testing.T) {
 	}
 }
 
+func TestTrustedChannelsMerge(t *testing.T) {
+	d := Discord{
+		TrustedChannelID:  "c1",
+		TrustedChannelIDs: []string{"c2", "c3"},
+	}
+	if got, want := d.TrustedChannels(), []string{"c1", "c2", "c3"}; !equalIDs(got, want) {
+		t.Errorf("TrustedChannels() = %v, want %v (singular merged with list)", got, want)
+	}
+	// Unset yields an empty list (feature inert).
+	if got := (Discord{}).TrustedChannels(); len(got) != 0 {
+		t.Errorf("empty TrustedChannels() = %v, want empty", got)
+	}
+	// Blank entries are dropped.
+	if got := (Discord{TrustedChannelIDs: []string{"", "c1"}}).TrustedChannels(); !equalIDs(got, []string{"c1"}) {
+		t.Errorf("TrustedChannels() with blank entry = %v, want [c1]", got)
+	}
+}
+
 func equalIDs(a, b []string) bool {
 	if len(a) != len(b) {
 		return false
