@@ -176,6 +176,35 @@ func TestHandle_GuestPathProvisionsSandbox(t *testing.T) {
 	}
 }
 
+// An owner whose request carries DefaultSandbox (a non-trusted channel) takes
+// the sandbox path even though the role is RoleOwner: the container is
+// provisioned and the host clone/worktree path is skipped.
+func TestHandle_OwnerDefaultSandboxProvisionsSandbox(t *testing.T) {
+	svc, g, tx, r, _ := newTestService()
+	d := &fakeDriver{turns: []scripted{{texts: []string{"on it"}, ref: "o-sess"}}}
+	svc.drivers = map[string]agentproc.Driver{"claude": d}
+	fs := &fakeSandboxer{}
+	svc.UseSandbox(fs, GuestPolicy{GitHubPAT: "PAT", GitUserName: "O", GitUserEmail: "o@e", EgressAllow: []string{"github.com"}})
+
+	svc.Handle(context.Background(), Request{
+		Content:        "owner/repo\nDo it.",
+		Origin:         baseOrigin(),
+		Role:           RoleOwner,
+		DefaultSandbox: true,
+	})
+	svc.waitIdle(r.threadID)
+
+	if fs.gotSpec.SessionName == "" {
+		t.Fatalf("an owner with DefaultSandbox should provision a sandbox; spec = %+v", fs.gotSpec)
+	}
+	if len(g.cloned) != 0 || len(g.worktrees) != 0 {
+		t.Errorf("the sandbox path must not clone/worktree on the host: cloned=%v worktrees=%v", g.cloned, g.worktrees)
+	}
+	if len(tx.created) != 0 {
+		t.Errorf("a sandboxed session is forced headless: must not launch tmux, got %v", tx.created)
+	}
+}
+
 // PromoteThread refuses a sandboxed guest session: handing it a host tmux
 // session would break out of the jail, so it stays headless (tracked), the
 // sandbox is not torn down, and an owner-only refusal is posted.

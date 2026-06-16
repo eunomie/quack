@@ -187,6 +187,13 @@ type Request struct {
 	InThread   bool
 	ThreadName string
 	Role       Role // owner by default; set by the Discord layer
+
+	// DefaultSandbox is the owner's channel-derived sandbox default, resolved by
+	// the Discord layer: true on every channel except the configured trusted ones
+	// (always false until trusted channels are configured). Guests are sandboxed
+	// independently of this, by role. The `sandbox` directive keyword can still
+	// force a sandbox when this is false.
+	DefaultSandbox bool
 }
 
 // Service orchestrates a session launch.
@@ -324,12 +331,14 @@ func (s *Service) run(ctx context.Context, req Request, dir *command.Directive, 
 		report("❌ " + msg)
 	}
 
-	// A session is sandboxed when the caller is a guest (always confined) or when
-	// an owner opted this one session in with the `sandbox` keyword. The sandbox
-	// execution decisions key on `sandboxed`, not on the role: Role stays the
-	// auth/ownership signal, while the container path is driven by whether a
+	// A session is sandboxed when the caller is a guest (always confined,
+	// independent of the gateway), when the channel policy defaults this owner to a
+	// sandbox (DefaultSandbox, set by the Discord layer for non-trusted channels),
+	// or when an owner opted this one session in with the `sandbox` keyword. The
+	// sandbox execution decisions key on `sandboxed`, not on the role: Role stays
+	// the auth/ownership signal, while the container path is driven by whether a
 	// sandbox handle is provisioned.
-	sandboxed := req.Role.IsGuest() || dir.Sandbox
+	sandboxed := req.Role.IsGuest() || req.DefaultSandbox || dir.Sandbox
 	if sandboxed {
 		if s.sandbox == nil {
 			fail("sandboxing is not configured on this server")
