@@ -483,7 +483,7 @@ func TestHandle_AgentNamesSession(t *testing.T) {
 	// Stop the session so the async title updater drains and exits before we read
 	// renames (otherwise the title goroutine races the assertions below).
 	ls := svc.sessions[r.threadID]
-	svc.StopThread(context.Background(), r.threadID, Caller{Role: RoleOwner})
+	svc.StopThread(context.Background(), r.threadID, Caller{Role: RoleOwner, UserID: "u"})
 	<-ls.title.done
 
 	if len(g.worktrees) != 1 || !strings.Contains(g.worktrees[0], "revue-worktrees/readme-suggestions|readme-suggestions|origin/main") {

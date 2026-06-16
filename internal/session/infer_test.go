@@ -273,7 +273,7 @@ func TestHandle_Fluent_Fallback(t *testing.T) {
 	svc.waitIdle(r.threadID)
 
 	ls := svc.sessions[r.threadID]
-	svc.StopThread(context.Background(), r.threadID, Caller{Role: RoleOwner})
+	svc.StopThread(context.Background(), r.threadID, Caller{Role: RoleOwner, UserID: "u"})
 	<-ls.title.done
 
 	if len(g.cloned) != 0 || len(g.worktrees) != 0 {
@@ -398,7 +398,7 @@ func TestHandle_Fluent_Headless(t *testing.T) {
 	svc.waitIdle(r.threadID)
 
 	ls := svc.sessions[r.threadID]
-	svc.StopThread(context.Background(), r.threadID, Caller{Role: RoleOwner})
+	svc.StopThread(context.Background(), r.threadID, Caller{Role: RoleOwner, UserID: "u"})
 	<-ls.title.done
 
 	if len(d.seen) != 1 {

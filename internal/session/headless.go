@@ -89,20 +89,27 @@ type liveSession struct {
 	closed bool
 }
 
-// Caller is the identity + trust level of whoever is trying to act on a session
-// (feed/stop). Guests may only act on sessions they started; owners on any.
+// Caller is the identity of whoever is trying to act on a session (feed/stop/
+// switch). System marks an internal, unconditional action (e.g. a thread-archive
+// stop) that bypasses the per-session access gate; it is never set for a request
+// originating from a Discord user.
 type Caller struct {
 	Role   Role
 	UserID string
+	System bool
 }
 
-// canModify reports whether caller may feed/stop this session. Owners: always.
-// Guests: only their own session.
+// canModify reports whether caller may feed/stop/switch this session. The gate
+// keys on the session's sandbox state, not the caller's role: a sandboxed
+// session is shared, so any authorized user may act on it (multi-user); an
+// unsandboxed session is private to its creator, so only the user who started
+// it may act — another owner is turned away too. System callers (internal,
+// unconditional actions) always pass.
 func (ls *liveSession) canModify(caller Caller) bool {
-	if caller.Role.IsGuest() {
-		return ls.authorID == caller.UserID
+	if caller.System || ls.sandbox != nil {
+		return true
 	}
-	return true
+	return ls.authorID == caller.UserID
 }
 
 // UseDrivers registers the headless agent drivers, keyed by agent name.

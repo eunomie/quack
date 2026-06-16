@@ -286,8 +286,9 @@ func (b *Bot) onThreadUpdate(s *discordgo.Session, t *discordgo.ThreadUpdate) {
 	}
 	if b.svc.Tracked(t.ID) {
 		// Archiving is an unconditional stop, not a user action against a specific
-		// session, so it runs as an owner caller and bypasses the own-session guard.
-		b.svc.StopThread(context.Background(), t.ID, session.Caller{Role: session.RoleOwner})
+		// session, so it runs as a System caller and bypasses the per-session gate
+		// (which would otherwise reject it on an unsandboxed creator-only session).
+		b.svc.StopThread(context.Background(), t.ID, session.Caller{System: true})
 	}
 }
 

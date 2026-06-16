@@ -69,7 +69,7 @@ func TestHeadless_StopRemovesRecord(t *testing.T) {
 		t.Fatalf("record should exist before stop")
 	}
 
-	svc.StopThread(context.Background(), "thread-1", Caller{Role: RoleOwner})
+	svc.StopThread(context.Background(), "thread-1", Caller{Role: RoleOwner, UserID: "owner"})
 	if _, ok := readRecord(t, fs, "demo"); ok {
 		t.Errorf("record should be removed after /stop")
 	}
@@ -241,7 +241,7 @@ func TestHeadless_InPlace_PersistsAndKeepsThreadOpen(t *testing.T) {
 		t.Errorf("record TitleBase=%q InPlace=%v, want \"Help with login\"/true", rec.TitleBase, rec.InPlace)
 	}
 
-	svc.StopThread(context.Background(), "post1", Caller{Role: RoleOwner})
+	svc.StopThread(context.Background(), "post1", Caller{Role: RoleOwner, UserID: "owner"})
 	for _, id := range r.archived {
 		if id == "post1" {
 			t.Errorf("in-place thread post1 must not be archived on stop; archived=%v", r.archived)

@@ -44,22 +44,65 @@ func TestHeadless_GuestTurnUsesContainerLauncherAndTearsDownOnStop(t *testing.T)
 	}
 }
 
-// Own-session-only: a guest may feed/stop only the session it started. A guest
-// acting on another user's session is silently ignored (returns false, session
-// stays tracked); the starting guest and any owner retain full access.
-func TestGuestCannotFeedOrStopOthersSession(t *testing.T) {
-	// Three turns are scripted: the launch, alice's own feed, and carol's (owner)
-	// feed. bob's rejected feeds run no turn at all.
+// A sandboxed session is shared: any authorized user (the starter, another
+// guest, an owner) may feed and stop it. This is the multi-user case.
+func TestSandboxedSessionIsMultiUser(t *testing.T) {
+	// Four turns: the launch + one per feed (alice, bob, carol).
+	d := &fakeDriver{turns: []scripted{
+		{texts: []string{"ok"}, ref: "g-ref"},
+		{texts: []string{"alice"}, ref: "g-ref"},
+		{texts: []string{"bob"}, ref: "g-ref"},
+		{texts: []string{"carol"}, ref: "g-ref"},
+	}}
+	svc, _, _, _ := newHeadlessServiceFakes(d)
+	svc.UseSandbox(&fakeSandboxer{}, GuestPolicy{GitHubPAT: "PAT"})
+
+	// alice starts a sandboxed session.
+	handle := &SandboxHandle{AgentContainer: "q-agent", Workdir: "/work/r", Name: "guest-sess"}
+	svc.startHeadless(context.Background(), "claude", "thread-g", "/work/r", "high", "guest-sess", "owner/repo",
+		RoleGuest, handle, "alice",
+		turnReq{channelID: "c", messageID: "m1", text: "do the thing"})
+	svc.waitIdle("thread-g")
+
+	feed := func(c Caller) bool {
+		ok := svc.FeedThread(context.Background(), "thread-g", "thread-g", "m-feed", "again", nil, c)
+		svc.waitIdle("thread-g")
+		return ok
+	}
+	for _, c := range []Caller{
+		{Role: RoleGuest, UserID: "alice"},
+		{Role: RoleGuest, UserID: "bob"},
+		{Role: RoleOwner, UserID: "carol"},
+	} {
+		if !feed(c) {
+			t.Errorf("sandboxed session: %+v should be able to feed (multi-user)", c)
+		}
+	}
+
+	// Any authorized user may stop a sandboxed session — here a guest who didn't
+	// start it.
+	if !svc.StopThread(context.Background(), "thread-g", Caller{Role: RoleGuest, UserID: "bob"}) {
+		t.Error("a guest must be able to stop a shared sandboxed session")
+	}
+	if svc.Tracked("thread-g") {
+		t.Error("session must be gone after the stop")
+	}
+}
+
+// An unsandboxed session is private to its creator: a different user — guest or
+// even another owner — is silently ignored (returns false, session stays
+// tracked). Only the user who started it may feed/stop it.
+func TestUnsandboxedSessionIsCreatorOnly(t *testing.T) {
+	// Two turns: the launch + alice's own feed. The foreign feeds run no turn.
 	d := &fakeDriver{turns: []scripted{
 		{texts: []string{"ok"}, ref: "g-ref"},
 		{texts: []string{"more"}, ref: "g-ref"},
-		{texts: []string{"owner turn"}, ref: "g-ref"},
 	}}
 	svc, _ := newHeadlessService(d)
 
-	// alice starts the session.
-	svc.startHeadless(context.Background(), "claude", "thread-g", "/work/r", "high", "guest-sess", "owner/repo",
-		RoleGuest, nil, "alice",
+	// alice starts an unsandboxed session.
+	svc.startHeadless(context.Background(), "claude", "thread-g", "/wt", "high", "sess", "owner/repo",
+		RoleOwner, nil, "alice",
 		turnReq{channelID: "c", messageID: "m1", text: "do the thing"})
 	svc.waitIdle("thread-g")
 
@@ -67,34 +110,33 @@ func TestGuestCannotFeedOrStopOthersSession(t *testing.T) {
 		return svc.FeedThread(context.Background(), "thread-g", "thread-g", "m-feed", "again", nil, c)
 	}
 
-	// A different guest (bob) cannot feed alice's session.
+	// A different user cannot feed alice's private session — not a guest...
 	if feed(Caller{Role: RoleGuest, UserID: "bob"}) {
-		t.Error("a guest must not be able to feed another guest's session")
+		t.Error("a non-creator must not be able to feed an unsandboxed session")
 	}
-	// alice (the owner of this session) can feed it.
-	if !feed(Caller{Role: RoleGuest, UserID: "alice"}) {
-		t.Error("the starting guest must be able to feed its own session")
+	// ...nor another owner.
+	if feed(Caller{Role: RoleOwner, UserID: "carol"}) {
+		t.Error("another owner must not be able to feed an unsandboxed creator-only session")
 	}
-	svc.waitIdle("thread-g")
-	// An owner can feed any session.
-	if !feed(Caller{Role: RoleOwner, UserID: "carol"}) {
-		t.Error("an owner must be able to feed any session")
+	// alice (the creator) can feed it.
+	if !feed(Caller{Role: RoleOwner, UserID: "alice"}) {
+		t.Error("the creator must be able to feed its own session")
 	}
 	svc.waitIdle("thread-g")
 
-	// bob cannot stop alice's session: it's a no-op and the session stays tracked.
-	if svc.StopThread(context.Background(), "thread-g", Caller{Role: RoleGuest, UserID: "bob"}) {
-		t.Error("a guest must not be able to stop another guest's session")
+	// A non-creator's /stop is a no-op; the session stays tracked.
+	if svc.StopThread(context.Background(), "thread-g", Caller{Role: RoleOwner, UserID: "carol"}) {
+		t.Error("a non-creator must not be able to stop an unsandboxed session")
 	}
 	if !svc.Tracked("thread-g") {
-		t.Fatal("session must stay tracked after a foreign guest's failed /stop")
+		t.Fatal("session must stay tracked after a non-creator's failed /stop")
 	}
-	// alice can stop her own session.
-	if !svc.StopThread(context.Background(), "thread-g", Caller{Role: RoleGuest, UserID: "alice"}) {
-		t.Error("the starting guest must be able to stop its own session")
+	// The creator can stop her own session.
+	if !svc.StopThread(context.Background(), "thread-g", Caller{Role: RoleOwner, UserID: "alice"}) {
+		t.Error("the creator must be able to stop its own session")
 	}
 	if svc.Tracked("thread-g") {
-		t.Error("session must be gone after the owning guest's /stop")
+		t.Error("session must be gone after the creator's /stop")
 	}
 }
 
@@ -179,7 +221,7 @@ func TestHeadless_OwnerTurnHasNoLauncherOrSandbox(t *testing.T) {
 	if d.seen[0].Launcher != nil {
 		t.Errorf("owner turn launcher = %v, want nil (DirectLauncher)", d.seen[0].Launcher)
 	}
-	svc.StopThread(context.Background(), "thread-o", Caller{Role: RoleOwner})
+	svc.StopThread(context.Background(), "thread-o", Caller{Role: RoleOwner, UserID: "owner"})
 	if fs.teardowns != 0 {
 		t.Errorf("owner stop must not tear down a sandbox, got %d teardowns", fs.teardowns)
 	}
@@ -196,7 +238,7 @@ func TestHeadless_RehydrateReattachesGuestSandbox(t *testing.T) {
 
 	seedRecord(fs, sessionRecord{
 		Name: "guest-demo", Label: "owner/repo", AgentName: "claude",
-		Workdir: "/work/r", // in-container path; git.PathExists would be false
+		Workdir:  "/work/r", // in-container path; git.PathExists would be false
 		ThreadID: "thread-g", RootChannelID: "c", RootMessageID: "m1", SessionRef: "sess-1",
 		Role:    RoleGuest,
 		Sandbox: &SandboxHandle{AgentContainer: "q-agent", Workdir: "/work/r", Name: "guest-demo"},

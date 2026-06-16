@@ -162,7 +162,7 @@ func TestStream_MidTurnInterjection(t *testing.T) {
 
 	// Owner interjects mid-turn. The loop must Interrupt the in-flight turn and Send
 	// the new message as the next turn.
-	if !svc.FeedThread(context.Background(), "thread-1", "thread-1", "m2", "actually, stop and do X", nil, Caller{Role: RoleOwner}) {
+	if !svc.FeedThread(context.Background(), "thread-1", "thread-1", "m2", "actually, stop and do X", nil, Caller{Role: RoleOwner, UserID: "owner"}) {
 		t.Fatalf("feed should report tracked thread")
 	}
 	waitFor(t, "interrupt + second send", func() bool {
@@ -204,7 +204,7 @@ func TestStream_StopClosesSession(t *testing.T) {
 	sess.emit(agentproc.TurnComplete{})
 	svc.waitIdle("thread-1")
 
-	if !svc.StopThread(context.Background(), "thread-1", Caller{Role: RoleOwner}) {
+	if !svc.StopThread(context.Background(), "thread-1", Caller{Role: RoleOwner, UserID: "owner"}) {
 		t.Fatalf("stop should end the session")
 	}
 	waitFor(t, "session closed", func() bool {

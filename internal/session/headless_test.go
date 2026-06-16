@@ -102,7 +102,7 @@ func TestHeadless_FirstTurnAndResume(t *testing.T) {
 		t.Errorf("expected working+done reactions on the trigger message, got %v", r.reacts)
 	}
 
-	if !svc.FeedThread(context.Background(), "thread-1", "thread-1", "m4", "now commit", nil, Caller{Role: RoleOwner}) {
+	if !svc.FeedThread(context.Background(), "thread-1", "thread-1", "m4", "now commit", nil, Caller{Role: RoleOwner, UserID: "owner"}) {
 		t.Fatalf("feed should report tracked thread")
 	}
 	svc.waitIdle("thread-1")
@@ -116,7 +116,7 @@ func TestHeadless_StopEndsSession(t *testing.T) {
 	svc, r := newHeadlessService(d)
 	svc.startHeadless(context.Background(), "claude", "thread-2", "/wt", "", "sess-2", "", RoleOwner, nil, "owner", turnReq{channelID: "c", messageID: "m2", text: "go"})
 	svc.waitIdle("thread-2")
-	if !svc.StopThread(context.Background(), "thread-2", Caller{Role: RoleOwner}) {
+	if !svc.StopThread(context.Background(), "thread-2", Caller{Role: RoleOwner, UserID: "owner"}) {
 		t.Fatalf("stop should report it ended a tracked session")
 	}
 	if svc.Tracked("thread-2") {
@@ -125,7 +125,7 @@ func TestHeadless_StopEndsSession(t *testing.T) {
 	if !hasStr(r.archived, "thread-2") {
 		t.Fatalf("thread should be archived (closed) after stop, got %v", r.archived)
 	}
-	if svc.FeedThread(context.Background(), "thread-2", "thread-2", "m5", "hello", nil, Caller{Role: RoleOwner}) {
+	if svc.FeedThread(context.Background(), "thread-2", "thread-2", "m5", "hello", nil, Caller{Role: RoleOwner, UserID: "owner"}) {
 		t.Fatalf("feed should report false for untracked thread")
 	}
 }
@@ -136,7 +136,7 @@ func TestHeadless_StopByMessageInThread(t *testing.T) {
 	svc, _ := newHeadlessService(d)
 	svc.startHeadless(context.Background(), "claude", "thread-2", "/wt", "", "sess-2", "", RoleOwner, nil, "owner", turnReq{channelID: "c", messageID: "m2", text: "go"})
 	svc.waitIdle("thread-2")
-	if !svc.StopByMessage(context.Background(), "thread-2", "any-thread-msg", Caller{Role: RoleOwner}) {
+	if !svc.StopByMessage(context.Background(), "thread-2", "any-thread-msg", Caller{Role: RoleOwner, UserID: "owner"}) {
 		t.Fatalf("reaction in the thread should stop the session")
 	}
 	if svc.Tracked("thread-2") {
@@ -152,10 +152,10 @@ func TestHeadless_StopByMessageOnRoot(t *testing.T) {
 	svc.startHeadless(context.Background(), "claude", "thread-2", "/wt", "", "sess-2", "", RoleOwner, nil, "owner", turnReq{channelID: "c", messageID: "m2", text: "go"})
 	svc.waitIdle("thread-2")
 	// Wrong message id in the right channel must not match.
-	if svc.StopByMessage(context.Background(), "c", "other", Caller{Role: RoleOwner}) {
+	if svc.StopByMessage(context.Background(), "c", "other", Caller{Role: RoleOwner, UserID: "owner"}) {
 		t.Fatalf("a different message in the root channel should not match")
 	}
-	if !svc.StopByMessage(context.Background(), "c", "m2", Caller{Role: RoleOwner}) {
+	if !svc.StopByMessage(context.Background(), "c", "m2", Caller{Role: RoleOwner, UserID: "owner"}) {
 		t.Fatalf("reaction on the root trigger message should stop the session")
 	}
 	if svc.Tracked("thread-2") {
@@ -169,7 +169,7 @@ func TestHeadless_StopByMessageNoMatch(t *testing.T) {
 	svc, _ := newHeadlessService(d)
 	svc.startHeadless(context.Background(), "claude", "thread-2", "/wt", "", "sess-2", "", RoleOwner, nil, "owner", turnReq{channelID: "c", messageID: "m2", text: "go"})
 	svc.waitIdle("thread-2")
-	if svc.StopByMessage(context.Background(), "elsewhere", "nope", Caller{Role: RoleOwner}) {
+	if svc.StopByMessage(context.Background(), "elsewhere", "nope", Caller{Role: RoleOwner, UserID: "owner"}) {
 		t.Fatalf("unrelated reaction should not stop any session")
 	}
 	if !svc.Tracked("thread-2") {
@@ -183,7 +183,7 @@ func TestHeadless_StopMarksRootMessageStopped(t *testing.T) {
 	svc.startHeadless(context.Background(), "claude", "thread-2", "/wt", "", "sess-2", "", RoleOwner, nil, "owner", turnReq{channelID: "c", messageID: "m2", text: "go"})
 	svc.waitIdle("thread-2")
 
-	if !svc.StopThread(context.Background(), "thread-2", Caller{Role: RoleOwner}) {
+	if !svc.StopThread(context.Background(), "thread-2", Caller{Role: RoleOwner, UserID: "owner"}) {
 		t.Fatalf("stop should report it ended a tracked session")
 	}
 
@@ -384,8 +384,8 @@ func TestHeadless_ThreadTitleStatusIcon(t *testing.T) {
 	svc.waitIdle("thread-1")
 
 	ls := svc.sessions["thread-1"]
-	svc.StopThread(context.Background(), "thread-1", Caller{Role: RoleOwner}) // close() stops the title updater
-	<-ls.title.done                                  // wait for its final drain
+	svc.StopThread(context.Background(), "thread-1", Caller{Role: RoleOwner, UserID: "owner"}) // close() stops the title updater
+	<-ls.title.done                                                                            // wait for its final drain
 
 	if len(r.renames) == 0 {
 		t.Fatalf("expected at least one thread rename for the status icon")
@@ -408,7 +408,7 @@ func TestHeadless_GlobalStatusTracksLatestTurn(t *testing.T) {
 		RoleOwner, nil, "owner", turnReq{channelID: "c", messageID: "m1", text: "go"})
 	svc.waitIdle("thread-1")
 
-	if !svc.FeedThread(context.Background(), "thread-1", "thread-1", "m2", "again", nil, Caller{Role: RoleOwner}) {
+	if !svc.FeedThread(context.Background(), "thread-1", "thread-1", "m2", "again", nil, Caller{Role: RoleOwner, UserID: "owner"}) {
 		t.Fatalf("feed should report tracked thread")
 	}
 	svc.waitIdle("thread-1")
@@ -425,6 +425,37 @@ func TestHeadless_GlobalStatusTracksLatestTurn(t *testing.T) {
 	// Turn 2's in-thread message carries its own per-turn reactions.
 	if !hasStr(r.reacts, "thread-1|m2|"+emojiWorking) || !hasStr(r.reacts, "thread-1|m2|"+emojiError) {
 		t.Errorf("expected per-turn reactions on the in-thread message, got %v", r.reacts)
+	}
+}
+
+// canModify keys on the session's sandbox state, not the caller's role:
+// a sandboxed session is shared (any authorized user may act), an unsandboxed
+// session is private to its creator (even another owner is turned away).
+func TestCanModify(t *testing.T) {
+	creator := Caller{Role: RoleGuest, UserID: "alice"}
+	otherGuest := Caller{Role: RoleGuest, UserID: "bob"}
+	otherOwner := Caller{Role: RoleOwner, UserID: "carol"}
+
+	sandboxed := &liveSession{authorID: "alice", sandbox: &SandboxHandle{}}
+	for _, c := range []Caller{creator, otherGuest, otherOwner} {
+		if !sandboxed.canModify(c) {
+			t.Errorf("sandboxed session: %+v should be allowed (multi-user)", c)
+		}
+	}
+
+	unsandboxed := &liveSession{authorID: "alice", sandbox: nil}
+	if !unsandboxed.canModify(creator) {
+		t.Error("unsandboxed session: the creator should be allowed")
+	}
+	if unsandboxed.canModify(otherGuest) {
+		t.Error("unsandboxed session: a non-creator guest must be rejected")
+	}
+	if unsandboxed.canModify(otherOwner) {
+		t.Error("unsandboxed session: a non-creator owner must be rejected")
+	}
+	// A System caller (e.g. a thread-archive stop) bypasses the creator gate.
+	if !unsandboxed.canModify(Caller{System: true}) {
+		t.Error("unsandboxed session: a System caller must be allowed")
 	}
 }
 

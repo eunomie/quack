@@ -123,7 +123,7 @@ func TestDoSwitch_LazyHandoff(t *testing.T) {
 	svc.waitIdle("thread-1")
 
 	ls := svc.sessions["thread-1"]
-	svc.doSwitch(context.Background(), ls, "codex", "", "c", "m2", nil, Caller{Role: RoleOwner})
+	svc.doSwitch(context.Background(), ls, "codex", "", "c", "m2", nil, Caller{Role: RoleOwner, UserID: "owner"})
 
 	if len(claude.seen) != 2 || claude.seen[1].SessionRef != "claude-1" || claude.seen[1].Prompt != handoffPrompt {
 		t.Fatalf("claude turns = %+v, want a summary turn resuming claude-1", claude.seen)
@@ -162,7 +162,7 @@ func TestDoSwitch_InlinePromptSeedsImmediately(t *testing.T) {
 	svc.waitIdle("thread-1")
 
 	ls := svc.sessions["thread-1"]
-	svc.doSwitch(context.Background(), ls, "codex", "fix the test", "c", "m2", nil, Caller{Role: RoleOwner})
+	svc.doSwitch(context.Background(), ls, "codex", "fix the test", "c", "m2", nil, Caller{Role: RoleOwner, UserID: "owner"})
 	svc.waitIdle("thread-1")
 
 	if len(codex.seen) != 1 {
@@ -188,7 +188,7 @@ func TestDoSwitch_SameAgentNoOp(t *testing.T) {
 	svc.waitIdle("thread-1")
 
 	ls := svc.sessions["thread-1"]
-	svc.doSwitch(context.Background(), ls, "claude", "keep going", "c", "m2", nil, Caller{Role: RoleOwner})
+	svc.doSwitch(context.Background(), ls, "claude", "keep going", "c", "m2", nil, Caller{Role: RoleOwner, UserID: "owner"})
 	svc.waitIdle("thread-1")
 
 	if svc.sessions["thread-1"] != ls {
@@ -211,7 +211,7 @@ func TestDoSwitch_EmptyRefSkipsSummary(t *testing.T) {
 		RootChannelID: "c", RootMessageID: "m1", SessionRef: "", // never produced a reply
 	})
 
-	svc.doSwitch(context.Background(), ls, "codex", "", "c", "m2", nil, Caller{Role: RoleOwner})
+	svc.doSwitch(context.Background(), ls, "codex", "", "c", "m2", nil, Caller{Role: RoleOwner, UserID: "owner"})
 
 	if len(claude.seen) != 0 {
 		t.Errorf("claude ran %d summary turns, want 0 (no ref to resume)", len(claude.seen))
@@ -233,7 +233,7 @@ func TestDoSwitch_UnknownAgentDoesNotTearDown(t *testing.T) {
 	svc.waitIdle("thread-1")
 	ls := svc.sessions["thread-1"]
 
-	svc.doSwitch(context.Background(), ls, "ghost", "", "c", "m2", nil, Caller{Role: RoleOwner})
+	svc.doSwitch(context.Background(), ls, "ghost", "", "c", "m2", nil, Caller{Role: RoleOwner, UserID: "owner"})
 
 	if svc.sessions["thread-1"] != ls || ls.agentName != "claude" {
 		t.Errorf("a bad switch must leave the live session untouched")
@@ -262,7 +262,7 @@ func TestSwitchAgent_GuestCannotSwitchOthersSession(t *testing.T) {
 
 func TestSwitchAgent_NotASwitchFallsThrough(t *testing.T) {
 	svc, _, _ := newSwitchService(&fakeDriver{}, &fakeDriver{})
-	if svc.SwitchAgent(context.Background(), "thread-1", "c", "m1", "just a message", nil, Caller{Role: RoleOwner}) {
+	if svc.SwitchAgent(context.Background(), "thread-1", "c", "m1", "just a message", nil, Caller{Role: RoleOwner, UserID: "owner"}) {
 		t.Errorf("non-trigger text must return false so the bot falls through to FeedThread")
 	}
 }
@@ -284,7 +284,7 @@ func TestSwitchAgent_DropsSecondConcurrentSwitch(t *testing.T) {
 	ls.switching = true
 	svc.hmu.Unlock()
 
-	if !svc.SwitchAgent(context.Background(), "thread-1", "c", "m2", "/codex", nil, Caller{Role: RoleOwner}) {
+	if !svc.SwitchAgent(context.Background(), "thread-1", "c", "m2", "/codex", nil, Caller{Role: RoleOwner, UserID: "owner"}) {
 		t.Fatalf("a switch trigger must report handled")
 	}
 	// No new switch started: still claude, and no summary turn ran.
