@@ -44,12 +44,19 @@ func (s *Service) prepareGuest(ctx context.Context, dir *command.Directive, name
 		GitHubPAT:    s.guest.GitHubPAT,
 		GitUserName:  s.guest.GitUserName,
 		GitUserEmail: s.guest.GitUserEmail,
+		ForkOwner:    s.guest.ForkOwner,
 		EgressAllow:  s.guest.EgressAllow,
 		CredFiles:    s.guest.CredFiles,
 	}
+	// Guest sandboxes are dedicated to default_repo (dagger/dagger): a request that
+	// names no repo clones the default rather than standing up an empty sandbox.
+	target := dir.Target
+	if target == "" {
+		target = s.guest.DefaultRepo
+	}
 	label := ""
-	if dir.Target != "" {
-		ref, err := repo.ParseRef(dir.Target)
+	if target != "" {
+		ref, err := repo.ParseRef(target)
 		if err != nil {
 			return prepResult{}, err
 		}
@@ -82,6 +89,7 @@ func (s *Service) guestReattachSpec(rec sessionRecord) SandboxSpec {
 		GitHubPAT:    s.guest.GitHubPAT,
 		GitUserName:  s.guest.GitUserName,
 		GitUserEmail: s.guest.GitUserEmail,
+		ForkOwner:    s.guest.ForkOwner,
 		EgressAllow:  s.guest.EgressAllow,
 		CredFiles:    s.guest.CredFiles,
 	}

@@ -135,6 +135,8 @@ func main() {
 				GitHubPAT:        cfg.Guest.GitHubPAT,
 				GitUserName:      cfg.Guest.GitUserName,
 				GitUserEmail:     cfg.Guest.GitUserEmail,
+				ForkOwner:        cfg.Guest.ForkOwner,
+				DefaultRepo:      cfg.Guest.DefaultRepo,
 				EgressAllow:      cfg.Guest.EgressAllow,
 				CredFiles:        parseMounts(cfg.Guest.CredFiles),
 				AllowedTools:     cfg.Guest.AllowedTools,

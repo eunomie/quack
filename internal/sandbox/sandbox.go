@@ -26,6 +26,7 @@ type Spec struct {
 	GitHubPAT    string
 	GitUserName  string
 	GitUserEmail string
+	ForkOwner    string // when set, a cloned repo's origin is renamed to upstream and fork_owner/<repo> added as origin
 	CredFiles    []Mount
 	AgentEnv     []string
 	EgressAllow  []string
@@ -185,7 +186,54 @@ func (p *DockerProvisioner) bringUp(ctx context.Context, h *Handle, spec Spec) e
 		return err
 	}
 
+	// Drop the standing agent guidance into the sandbox home (claude's global
+	// CLAUDE.md and codex's global AGENTS.md) so every in-sandbox turn follows the
+	// contribution conventions without clobbering the cloned repo's own AGENTS.md.
+	// The agent container's filesystem is rebuilt on a Reattach, so this is written
+	// here (in bringUp) alongside cred seeding, not only at first Provision.
+	if _, err := p.D.Exec(ctx, h.AgentContainer, "sh", "-lc", guidanceScript(spec)); err != nil {
+		return err
+	}
+
 	return nil
+}
+
+// guidanceText renders the agent guidance. The sign-off identity is taken from
+// the configured guest identity (spec); no identity is hard-coded here. When the
+// identity is unset, the sign-off bullet stays generic.
+func guidanceText(spec Spec) string {
+	signoff := "a `Signed-off-by` line"
+	if spec.GitUserName != "" && spec.GitUserEmail != "" {
+		signoff = fmt.Sprintf("a `Signed-off-by: %s <%s>` line", spec.GitUserName, spec.GitUserEmail)
+	}
+	return `# Sandbox agent guidance
+
+This is a quack guest sandbox dedicated by default to working on ` + "`dagger/dagger`" + `.
+Cloned repos are wired for a fork PR workflow: ` + "`origin`" + ` is your fork
+(push here), ` + "`upstream`" + ` is the source (e.g. dagger/dagger). You can work on
+another repo if asked, but dagger/dagger is the main purpose.
+
+## Version control
+- Use ` + "`stg`" + ` (Stacked Git) to manage commits as a stack of patches; the
+  ` + "`stg`" + ` CLI is installed. Prefer stacked patches over plain commits.
+- **Always** add ` + signoff + ` to every patch/commit.
+- **Never** add ` + "`Co-Authored-By`" + ` lines for any AI agent.
+- **Never** advertise that a PR, commit, or patch was made by an AI agent. Do
+  not add "Generated with Claude", "🤖 Generated with Claude Code", or any
+  similar attribution to PR titles, PR bodies, commit messages, or patches.
+- **Never** run ` + "`git push`" + ` or open a PR without explicit approval.
+`
+}
+
+// guidanceScript writes guidanceText into both agent homes via a quoted heredoc
+// (no shell interpolation of the body).
+func guidanceScript(spec Spec) string {
+	const marker = "QUACK_GUIDANCE_EOF"
+	return "mkdir -p /root/.claude /root/.codex && " +
+		"cat > /root/.claude/CLAUDE.md <<'" + marker + "'\n" +
+		guidanceText(spec) +
+		"\n" + marker + "\n" +
+		"cp /root/.claude/CLAUDE.md /root/.codex/AGENTS.md"
 }
 
 // Provision stands up a fresh sandbox and clones the repo (empty sandbox if no
@@ -209,6 +257,18 @@ func (p *DockerProvisioner) Provision(ctx context.Context, spec Spec) (*Handle, 
 			return nil, err
 		}
 		h.Workdir = "/work/" + dir
+		// Fork PR workflow: rename the clone source (origin) to upstream and point
+		// origin at the fork, so guest pushes land on the fork rather than upstream.
+		if spec.ForkOwner != "" {
+			repo := repoBase(spec.RepoURL)
+			forkURL := "https://github.com/" + spec.ForkOwner + "/" + repo + ".git"
+			if _, err := p.D.Exec(ctx, h.AgentContainer, "git", "-C", h.Workdir, "remote", "rename", "origin", "upstream"); err != nil {
+				return nil, err
+			}
+			if _, err := p.D.Exec(ctx, h.AgentContainer, "git", "-C", h.Workdir, "remote", "add", "origin", forkURL); err != nil {
+				return nil, err
+			}
+		}
 	}
 	return h, nil
 }

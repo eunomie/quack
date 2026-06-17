@@ -97,6 +97,81 @@ func TestProvisionCopiesCredFilesWritable(t *testing.T) {
 	}
 }
 
+func TestProvisionRewritesOriginToFork(t *testing.T) {
+	d, calls := recordingDocker()
+	p := &DockerProvisioner{D: d, AgentImage: "i", ProxyImage: "px", DindImage: "docker:dind"}
+	_, err := p.Provision(context.Background(), Spec{
+		SessionName: "feat-x", EgressAllow: []string{"x"},
+		RepoURL: "https://github.com/dagger/dagger", CloneRef: "main",
+		ForkOwner: "eunomie-quack",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// origin (the clone source) becomes upstream; the fork becomes the new origin
+	// so guest pushes land on the fork, not the upstream source.
+	for _, want := range []string{
+		"git -C /work/dagger remote rename origin upstream",
+		"git -C /work/dagger remote add origin https://github.com/eunomie-quack/dagger.git",
+	} {
+		if !hasCall(*calls, want) {
+			t.Fatalf("missing fork-remote call %q in %v", want, *calls)
+		}
+	}
+}
+
+func TestProvisionNoForkRewriteWithoutForkOwner(t *testing.T) {
+	d, calls := recordingDocker()
+	p := &DockerProvisioner{D: d, AgentImage: "i", ProxyImage: "px", DindImage: "docker:dind"}
+	_, _ = p.Provision(context.Background(), Spec{
+		SessionName: "q", EgressAllow: []string{"x"},
+		RepoURL: "https://github.com/dagger/dagger",
+	})
+	if hasCall(*calls, "remote rename origin upstream") {
+		t.Fatalf("no fork rewrite expected without ForkOwner: %v", *calls)
+	}
+}
+
+func TestProvisionEmptySandboxNoForkRewrite(t *testing.T) {
+	d, calls := recordingDocker()
+	p := &DockerProvisioner{D: d, AgentImage: "i", ProxyImage: "px", DindImage: "docker:dind"}
+	_, _ = p.Provision(context.Background(), Spec{SessionName: "q", EgressAllow: []string{"x"}, ForkOwner: "eunomie-quack"})
+	if hasCall(*calls, "remote rename") {
+		t.Fatalf("empty sandbox must not rewrite remotes: %v", *calls)
+	}
+}
+
+func TestProvisionWritesAgentGuidance(t *testing.T) {
+	d, calls := recordingDocker()
+	p := &DockerProvisioner{D: d, AgentImage: "i", ProxyImage: "px", DindImage: "docker:dind"}
+	_, err := p.Provision(context.Background(), Spec{
+		SessionName: "q", EgressAllow: []string{"x"},
+		GitUserName: "Tester", GitUserEmail: "dev@example.com",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var guidance string
+	for _, c := range *calls {
+		joined := strings.Join(c, " ")
+		if strings.Contains(joined, "/root/.claude/CLAUDE.md") && strings.Contains(joined, "/root/.codex/AGENTS.md") {
+			guidance = joined
+		}
+	}
+	if guidance == "" {
+		t.Fatalf("guidance not written to both claude+codex homes: %v", *calls)
+	}
+	// Sign-off identity is templated from the configured guest identity.
+	if !strings.Contains(guidance, "Signed-off-by: Tester <dev@example.com>") {
+		t.Fatalf("guidance missing templated sign-off: %s", guidance)
+	}
+	for _, want := range []string{"stg", "Co-Authored-By", "dagger/dagger"} {
+		if !strings.Contains(guidance, want) {
+			t.Fatalf("guidance missing %q: %s", want, guidance)
+		}
+	}
+}
+
 func TestHandleHoldsNoSecrets(t *testing.T) {
 	d, _ := recordingDocker()
 	p := &DockerProvisioner{D: d, AgentImage: "i", ProxyImage: "px", DindImage: "docker:dind"}

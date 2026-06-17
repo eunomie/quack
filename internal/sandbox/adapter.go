@@ -44,6 +44,7 @@ func toSpec(s session.SandboxSpec) Spec {
 		GitHubPAT:    s.GitHubPAT,
 		GitUserName:  s.GitUserName,
 		GitUserEmail: s.GitUserEmail,
+		ForkOwner:    s.ForkOwner,
 		CredFiles:    mounts,
 		AgentEnv:     s.AgentEnv,
 		EgressAllow:  s.EgressAllow,

@@ -94,6 +94,7 @@ type SandboxSpec struct {
 	GitHubPAT    string
 	GitUserName  string
 	GitUserEmail string
+	ForkOwner    string
 	CredFiles    []SandboxMount
 	AgentEnv     []string
 	EgressAllow  []string
@@ -130,6 +131,8 @@ type GuestPolicy struct {
 	GitHubPAT        string
 	GitUserName      string
 	GitUserEmail     string
+	ForkOwner        string
+	DefaultRepo      string
 	EgressAllow      []string
 	CredFiles        []SandboxMount
 	AllowedTools     string
