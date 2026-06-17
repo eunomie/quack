@@ -10,6 +10,8 @@ type Guest struct {
 	GitHubPAT        string   `toml:"github_pat"`    // fine-grained PAT (or via QUACK_GUEST_GITHUB_PAT env)
 	GitUserName      string   `toml:"git_user_name"` // commit identity for guests
 	GitUserEmail     string   `toml:"git_user_email"`
+	ForkOwner        string   `toml:"fork_owner"`       // origin fork owner; clones rewrite origin->upstream and fork->origin
+	DefaultRepo      string   `toml:"default_repo"`     // "owner/repo" cloned when a guest gives no target
 	EgressAllow      []string `toml:"egress_allow"`     // proxy allow-list hosts
 	CredFiles        []string `toml:"cred_files"`       // "host:container" credential files copied into each sandbox (claude/codex/dagger), writable
 	AllowedTools     string   `toml:"allowed_tools"`    // claude --allowedTools for guests
@@ -31,6 +33,12 @@ func (g Guest) WithDefaults() Guest {
 	}
 	if g.ProxyPort == "" {
 		g.ProxyPort = "8888"
+	}
+	if g.ForkOwner == "" {
+		g.ForkOwner = "eunomie-quack"
+	}
+	if g.DefaultRepo == "" {
+		g.DefaultRepo = "dagger/dagger"
 	}
 	if len(g.EgressAllow) == 0 {
 		g.EgressAllow = []string{
