@@ -1,10 +1,10 @@
 # quack guest-sandbox agent image.
 #
 # This is the image the *agent* container runs (the unprivileged box a guest's
-# claude/codex turns are `docker exec`'d into). It needs: git + gh (commit/push
-# via the injected fine-grained PAT), the Docker *client* (talks to the dind
-# sidecar over DOCKER_HOST, never the host socket), a JS runtime for claude, and
-# the claude + codex CLIs.
+# claude/codex turns are `docker exec`'d into). It needs: git + gh + stg
+# (commit/patch/push via the injected fine-grained PAT), the Docker *client*
+# (talks to the dind sidecar over DOCKER_HOST, never the host socket), a JS
+# runtime for claude, and the claude + codex CLIs.
 #
 # Build:  docker build -t quack-sandbox:latest hack/sandbox
 #
@@ -16,7 +16,7 @@ FROM debian:bookworm-slim
 # Base tooling. docker.io provides the docker client (the daemon binary is
 # present but unused — the agent talks to the dind sidecar, not a local daemon).
 RUN apt-get update && apt-get install -y --no-install-recommends \
-        ca-certificates git curl gnupg docker.io openssh-client build-essential \
+        ca-certificates git curl gnupg docker.io openssh-client build-essential stgit \
     && rm -rf /var/lib/apt/lists/*
 
 # GitHub CLI (gh) from its official apt repo.
@@ -35,9 +35,10 @@ RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
 
 # dagger CLI. Its engine runs inside the dind sidecar (the agent's DOCKER_HOST
 # points there), so guests can run dagger pipelines; sharing the owner's dagger
-# Cloud auth is handled at provision time (see [guest].cred_files). Pinned to the
-# owner's version; override with --build-arg DAGGER_VERSION=… .
-ARG DAGGER_VERSION=v0.21.4
+# Cloud auth is handled at provision time (see [guest].cred_files). Installs the
+# latest release by default (empty DAGGER_VERSION); pin a specific version with
+# --build-arg DAGGER_VERSION=v0.21.4 .
+ARG DAGGER_VERSION=
 RUN curl -fsSL https://dl.dagger.io/dagger/install.sh | BIN_DIR=/usr/local/bin DAGGER_VERSION="$DAGGER_VERSION" sh
 
 WORKDIR /work
