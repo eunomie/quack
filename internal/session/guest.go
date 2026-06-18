@@ -44,7 +44,6 @@ func (s *Service) prepareGuest(ctx context.Context, dir *command.Directive, name
 		GitHubPAT:    s.guest.GitHubPAT,
 		GitUserName:  s.guest.GitUserName,
 		GitUserEmail: s.guest.GitUserEmail,
-		ForkOwner:    s.guest.ForkOwner,
 		EgressAllow:  s.guest.EgressAllow,
 		CredFiles:    s.guest.CredFiles,
 	}
@@ -89,7 +88,6 @@ func (s *Service) guestReattachSpec(rec sessionRecord) SandboxSpec {
 		GitHubPAT:    s.guest.GitHubPAT,
 		GitUserName:  s.guest.GitUserName,
 		GitUserEmail: s.guest.GitUserEmail,
-		ForkOwner:    s.guest.ForkOwner,
 		EgressAllow:  s.guest.EgressAllow,
 		CredFiles:    s.guest.CredFiles,
 	}

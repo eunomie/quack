@@ -13,17 +13,14 @@ func TestGuestConfigDefaults(t *testing.T) {
 	if len(g.EgressAllow) == 0 {
 		t.Fatal("expected default egress allow-list")
 	}
-	if g.ForkOwner != "eunomie-quack" {
-		t.Fatalf("fork_owner default = %q, want eunomie-quack", g.ForkOwner)
-	}
 	if g.DefaultRepo != "dagger/dagger" {
 		t.Fatalf("default_repo default = %q, want dagger/dagger", g.DefaultRepo)
 	}
 }
 
-func TestGuestConfigKeepsExplicitForkAndRepo(t *testing.T) {
-	g := Guest{ForkOwner: "acme", DefaultRepo: "acme/widgets"}.WithDefaults()
-	if g.ForkOwner != "acme" || g.DefaultRepo != "acme/widgets" {
-		t.Fatalf("explicit values overwritten: %+v", g)
+func TestGuestConfigKeepsExplicitRepo(t *testing.T) {
+	g := Guest{DefaultRepo: "acme/widgets"}.WithDefaults()
+	if g.DefaultRepo != "acme/widgets" {
+		t.Fatalf("explicit value overwritten: %+v", g)
 	}
 }

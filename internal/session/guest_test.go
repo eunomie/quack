@@ -131,16 +131,13 @@ func TestPrepareGuestEmptySandboxNoTarget(t *testing.T) {
 func TestPrepareGuestNoTargetClonesDefaultRepo(t *testing.T) {
 	s := New(Config{}, nil, nil, nil)
 	fs := &fakeSandboxer{}
-	s.UseSandbox(fs, GuestPolicy{DefaultRepo: "dagger/dagger", ForkOwner: "eunomie-quack"})
+	s.UseSandbox(fs, GuestPolicy{DefaultRepo: "dagger/dagger"})
 	prep, err := s.prepareGuest(context.Background(), &command.Directive{Prompt: "fix a bug"}, "name")
 	if err != nil {
 		t.Fatal(err)
 	}
 	if !strings.Contains(fs.gotSpec.RepoURL, "dagger/dagger") {
 		t.Fatalf("no target + default_repo should clone dagger/dagger, got %q", fs.gotSpec.RepoURL)
-	}
-	if fs.gotSpec.ForkOwner != "eunomie-quack" {
-		t.Fatalf("fork owner should be threaded into the spec, got %q", fs.gotSpec.ForkOwner)
 	}
 	if prep.label != "dagger/dagger" {
 		t.Fatalf("label = %q, want dagger/dagger", prep.label)

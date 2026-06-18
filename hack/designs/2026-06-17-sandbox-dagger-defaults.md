@@ -30,6 +30,11 @@ All changes are **guest-sandbox only**; owner sessions are unaffected.
 
 ### 2. Fork remote setup on provision (`internal/sandbox/sandbox.go`)
 
+> **Superseded (2026-06-18):** the fork workflow was dropped in favour of
+> branching directly on the source repo — see
+> [`2026-06-18-sandbox-direct-branches.md`](2026-06-18-sandbox-direct-branches.md).
+> The section below is kept for historical rationale.
+
 New `Spec.ForkOwner` field (sourced from config, default `eunomie-quack`). After
 a successful clone of `<owner>/<repo>`, when `ForkOwner` is set:
 

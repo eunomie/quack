@@ -26,7 +26,6 @@ type Spec struct {
 	GitHubPAT    string
 	GitUserName  string
 	GitUserEmail string
-	ForkOwner    string // when set, a cloned repo's origin is renamed to upstream and fork_owner/<repo> added as origin
 	CredFiles    []Mount
 	AgentEnv     []string
 	EgressAllow  []string
@@ -209,9 +208,11 @@ func guidanceText(spec Spec) string {
 	return `# Sandbox agent guidance
 
 This is a quack guest sandbox dedicated by default to working on ` + "`dagger/dagger`" + `.
-Cloned repos are wired for a fork PR workflow: ` + "`origin`" + ` is your fork
-(push here), ` + "`upstream`" + ` is the source (e.g. dagger/dagger). You can work on
-another repo if asked, but dagger/dagger is the main purpose.
+A cloned repo's ` + "`origin`" + ` is the source itself (e.g. dagger/dagger) and the
+injected GitHub token can push to it, so contribute the same way the owner does:
+create a branch directly on ` + "`origin`" + ` and open a PR from it (no fork). Use a
+descriptive, unique branch name to avoid clashing with other branches on the repo.
+You can work on another repo if asked, but dagger/dagger is the main purpose.
 
 ## Version control
 - Use ` + "`stg`" + ` (Stacked Git) to manage commits as a stack of patches; the
@@ -257,18 +258,9 @@ func (p *DockerProvisioner) Provision(ctx context.Context, spec Spec) (*Handle, 
 			return nil, err
 		}
 		h.Workdir = "/work/" + dir
-		// Fork PR workflow: rename the clone source (origin) to upstream and point
-		// origin at the fork, so guest pushes land on the fork rather than upstream.
-		if spec.ForkOwner != "" {
-			repo := repoBase(spec.RepoURL)
-			forkURL := "https://github.com/" + spec.ForkOwner + "/" + repo + ".git"
-			if _, err := p.D.Exec(ctx, h.AgentContainer, "git", "-C", h.Workdir, "remote", "rename", "origin", "upstream"); err != nil {
-				return nil, err
-			}
-			if _, err := p.D.Exec(ctx, h.AgentContainer, "git", "-C", h.Workdir, "remote", "add", "origin", forkURL); err != nil {
-				return nil, err
-			}
-		}
+		// origin stays pointed at the clone source (e.g. dagger/dagger); the
+		// injected PAT can push branches to it directly, so guests open PRs from
+		// branches on the source repo rather than from a fork.
 	}
 	return h, nil
 }

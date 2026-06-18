@@ -97,47 +97,22 @@ func TestProvisionCopiesCredFilesWritable(t *testing.T) {
 	}
 }
 
-func TestProvisionRewritesOriginToFork(t *testing.T) {
+func TestProvisionKeepsOriginAtSource(t *testing.T) {
 	d, calls := recordingDocker()
 	p := &DockerProvisioner{D: d, AgentImage: "i", ProxyImage: "px", DindImage: "docker:dind"}
 	_, err := p.Provision(context.Background(), Spec{
 		SessionName: "feat-x", EgressAllow: []string{"x"},
 		RepoURL: "https://github.com/dagger/dagger", CloneRef: "main",
-		ForkOwner: "eunomie-quack",
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	// origin (the clone source) becomes upstream; the fork becomes the new origin
-	// so guest pushes land on the fork, not the upstream source.
-	for _, want := range []string{
-		"git -C /work/dagger remote rename origin upstream",
-		"git -C /work/dagger remote add origin https://github.com/eunomie-quack/dagger.git",
-	} {
-		if !hasCall(*calls, want) {
-			t.Fatalf("missing fork-remote call %q in %v", want, *calls)
+	// No fork: origin stays pointed at the clone source so guests branch and open
+	// PRs directly on it. The provisioner must not rewrite the remotes.
+	for _, unwanted := range []string{"remote rename", "remote add"} {
+		if hasCall(*calls, unwanted) {
+			t.Fatalf("origin must be left at the source, found %q in %v", unwanted, *calls)
 		}
-	}
-}
-
-func TestProvisionNoForkRewriteWithoutForkOwner(t *testing.T) {
-	d, calls := recordingDocker()
-	p := &DockerProvisioner{D: d, AgentImage: "i", ProxyImage: "px", DindImage: "docker:dind"}
-	_, _ = p.Provision(context.Background(), Spec{
-		SessionName: "q", EgressAllow: []string{"x"},
-		RepoURL: "https://github.com/dagger/dagger",
-	})
-	if hasCall(*calls, "remote rename origin upstream") {
-		t.Fatalf("no fork rewrite expected without ForkOwner: %v", *calls)
-	}
-}
-
-func TestProvisionEmptySandboxNoForkRewrite(t *testing.T) {
-	d, calls := recordingDocker()
-	p := &DockerProvisioner{D: d, AgentImage: "i", ProxyImage: "px", DindImage: "docker:dind"}
-	_, _ = p.Provision(context.Background(), Spec{SessionName: "q", EgressAllow: []string{"x"}, ForkOwner: "eunomie-quack"})
-	if hasCall(*calls, "remote rename") {
-		t.Fatalf("empty sandbox must not rewrite remotes: %v", *calls)
 	}
 }
 

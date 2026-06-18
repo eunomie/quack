@@ -143,11 +143,10 @@ permission_mode = "auto"
 # github_pat     = "github_pat_..."
 # git_user_name  = "Your Name"              # commit identity guests share
 # git_user_email = "you@example.com"
-# Fork PR workflow + default repo. Sandboxes are dedicated to default_repo: a
-# guest request that names no repo clones it (instead of an empty sandbox). After
-# any clone, origin (the source) is renamed to upstream and fork_owner/<repo> is
-# added as the new origin, so guest pushes land on the fork, not upstream.
-# fork_owner     = "eunomie-quack"          # origin fork owner (the PAT's identity)
+# Default repo. Sandboxes are dedicated to default_repo: a guest request that
+# names no repo clones it (instead of an empty sandbox). A clone keeps origin
+# pointed at the source itself, so — with a PAT that can push to it — guests
+# create branches directly on the source repo and open PRs from them (no fork).
 # default_repo   = "dagger/dagger"          # cloned when a guest gives no target
 # Network egress allow-list for the agent container (model API + GitHub + dagger).
 # The default covers Anthropic/OpenAI/GitHub and dagger Cloud; override to
