@@ -116,6 +116,7 @@ type SandboxHandle struct {
 	ExtNetwork       string `json:"ext_network"`
 	CertVolume       string `json:"cert_volume"`
 	WorkVolume       string `json:"work_volume"`
+	HomeVolume       string `json:"home_volume,omitempty"`
 	Workdir          string `json:"workdir"`
 }
 

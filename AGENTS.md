@@ -291,7 +291,10 @@ two containers on a private per-session network: an **unprivileged agent contain
 sidecar** (privileged; gives guests real Docker without exposing the host
 socket). Shared credential files (`[guest].cred_files`: claude/codex/dagger auth)
 are **copied** into the agent's writable home, not bind-mounted read-only, so
-OAuth tokens can refresh inside the jail. The image pre-installs `dagger` (its
+OAuth tokens can refresh inside the jail. The agent's `$HOME` lives on a
+per-session **home volume** (`quack-<n>-home`), so claude/codex conversation
+history (`~/.claude`, `~/.codex`) survives a container rebuild — only `/stop`
+(teardown) removes it. The image pre-installs `dagger` (its
 engine runs on the dind sidecar), so sharing `~/.config/dagger` lets guest dagger
 runs land in the owner's Cloud org. The agent container sits on an `--internal`
 network with no direct egress — its only route out is an allow-listing proxy

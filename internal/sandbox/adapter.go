@@ -63,6 +63,7 @@ func toSessionHandle(h *Handle) *session.SandboxHandle {
 		ExtNetwork:       h.ExtNetwork,
 		CertVolume:       h.CertVolume,
 		WorkVolume:       h.WorkVolume,
+		HomeVolume:       h.HomeVolume,
 		Workdir:          h.Workdir,
 	}
 }
@@ -78,6 +79,7 @@ func fromSessionHandle(h *session.SandboxHandle) *Handle {
 		ExtNetwork:       h.ExtNetwork,
 		CertVolume:       h.CertVolume,
 		WorkVolume:       h.WorkVolume,
+		HomeVolume:       h.HomeVolume,
 		Workdir:          h.Workdir,
 	}
 }

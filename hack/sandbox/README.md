@@ -27,9 +27,11 @@ Image names are overridable in config (`[guest].image`, `[guest].proxy_image`,
 ## How a guest session is wired
 
 Per session quack creates: a private **internal** network (the agent has *no*
-direct internet route), an external network, a certs volume + a work volume, the
-egress proxy, a privileged `docker:dind` sidecar, and the unprivileged agent
-container. Turns run as `docker exec` into the agent container; `/stop` (or
+direct internet route), an external network, a certs volume + a work volume + a
+**home volume** (persists the agent's `$HOME`, so claude/codex conversation
+history survives a container rebuild), the egress proxy, a privileged
+`docker:dind` sidecar, an optional read-only Discord broker, and the unprivileged
+agent container. Turns run as `docker exec` into the agent container; `/stop` (or
 thread archive) tears the whole set down. See
 `hack/designs/2026-06-05-multi-user-sandbox-hardening.md` for the full design and
 threat model.

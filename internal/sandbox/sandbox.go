@@ -49,6 +49,7 @@ type Handle struct {
 	ExtNetwork       string `json:"ext_network"`
 	CertVolume       string `json:"cert_volume"`
 	WorkVolume       string `json:"work_volume"`
+	HomeVolume       string `json:"home_volume,omitempty"`
 	Workdir          string `json:"workdir"`
 }
 
@@ -87,6 +88,7 @@ func (p *DockerProvisioner) handleFor(sessionName string) *Handle {
 		ExtNetwork:       "quack-" + n + "-ext",
 		CertVolume:       "quack-" + n + "-certs",
 		WorkVolume:       "quack-" + n + "-work",
+		HomeVolume:       "quack-" + n + "-home",
 		Workdir:          "/work",
 	}
 }
@@ -135,6 +137,14 @@ func (p *DockerProvisioner) bringUp(ctx context.Context, h *Handle, spec Spec) e
 		return err
 	}
 	if err := p.D.CreateVolume(ctx, h.WorkVolume); err != nil {
+		return err
+	}
+	// Home volume: persists the agent's $HOME (claude/codex conversation history
+	// under ~/.claude, ~/.codex) across container rebuilds. CreateVolume is
+	// idempotent, so the rebuild path reuses the existing history rather than
+	// wiping it. Docker populates a fresh volume from the image's /root on first
+	// use; thereafter it is left intact.
+	if err := p.D.CreateVolume(ctx, h.HomeVolume); err != nil {
 		return err
 	}
 
@@ -190,6 +200,7 @@ func (p *DockerProvisioner) bringUp(ctx context.Context, h *Handle, spec Spec) e
 		"--name", h.AgentContainer,
 		"--network", h.IntNetwork,
 		"-v", h.WorkVolume + ":/work",
+		"-v", h.HomeVolume + ":/root",
 		"-v", h.CertVolume + ":/certs:ro",
 		"-e", "HTTPS_PROXY=http://" + h.ProxyContainer + ":" + port,
 		"-e", "HTTP_PROXY=http://" + h.ProxyContainer + ":" + port,
@@ -337,7 +348,7 @@ func (p *DockerProvisioner) Teardown(ctx context.Context, h *Handle) error {
 			_ = p.D.RemoveNetwork(ctx, n)
 		}
 	}
-	for _, v := range []string{h.WorkVolume, h.CertVolume} {
+	for _, v := range []string{h.WorkVolume, h.CertVolume, h.HomeVolume} {
 		if v != "" {
 			_ = p.D.RemoveVolume(ctx, v)
 		}

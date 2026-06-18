@@ -172,6 +172,61 @@ func TestTeardownRemovesEverything(t *testing.T) {
 	}
 }
 
+func TestProvisionMountsHomeVolumeForHistory(t *testing.T) {
+	d, calls := recordingDocker()
+	p := &DockerProvisioner{D: d, AgentImage: "i", ProxyImage: "px", DindImage: "docker:dind"}
+	_, err := p.Provision(context.Background(), Spec{SessionName: "q", EgressAllow: []string{"x"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The agent home must live on a persistent per-session volume so claude/codex
+	// conversation history (~/.claude, ~/.codex) survives a container rebuild.
+	if !hasCall(*calls, "volume create quack-q-home") {
+		t.Fatalf("home volume must be created: %v", *calls)
+	}
+	if !hasCall(*calls, "quack-q-home:/root") {
+		t.Fatalf("agent home must be mounted on the home volume: %v", *calls)
+	}
+}
+
+func TestTeardownRemovesHomeVolume(t *testing.T) {
+	d, calls := recordingDocker()
+	p := &DockerProvisioner{D: d}
+	h := &Handle{AgentContainer: "a", HomeVolume: "hv", WorkVolume: "wv"}
+	if err := p.Teardown(context.Background(), h); err != nil {
+		t.Fatal(err)
+	}
+	if !hasCall(*calls, "volume rm -f hv") {
+		t.Fatalf("teardown must remove the home volume: %v", *calls)
+	}
+}
+
+func TestRebuildKeepsHomeVolume(t *testing.T) {
+	// On the Reattach rebuild path (containers gone, volumes kept), the home
+	// volume must NOT be re-created destructively — CreateVolume is idempotent, so
+	// the existing history is reused. We assert the agent still mounts it.
+	var calls [][]string
+	d := &Docker{run: func(ctx context.Context, name string, args ...string) ([]byte, error) {
+		calls = append(calls, append([]string{name}, args...))
+		for _, a := range args {
+			if a == "inspect" {
+				return nil, errInspect // agent missing -> rebuild
+			}
+		}
+		return []byte("ok"), nil
+	}}
+	p := &DockerProvisioner{D: d, AgentImage: "i", ProxyImage: "px", DindImage: "docker:dind"}
+	h := &Handle{Name: "q", AgentContainer: "quack-q-agent", DindContainer: "quack-q-dind",
+		ProxyContainer: "quack-q-proxy", IntNetwork: "quack-q-int", ExtNetwork: "quack-q-ext",
+		CertVolume: "quack-q-certs", WorkVolume: "quack-q-work", HomeVolume: "quack-q-home", Workdir: "/work/r"}
+	if err := p.Reattach(context.Background(), h, Spec{SessionName: "q", EgressAllow: []string{"x"}}); err != nil {
+		t.Fatal(err)
+	}
+	if !hasCall(calls, "quack-q-home:/root") {
+		t.Fatalf("rebuild must re-mount the home volume: %v", calls)
+	}
+}
+
 func TestProvisionRunsDiscordBrokerWhenConfigured(t *testing.T) {
 	d, calls := recordingDocker()
 	p := &DockerProvisioner{D: d, AgentImage: "i", ProxyImage: "px", DindImage: "docker:dind",
