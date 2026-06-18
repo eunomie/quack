@@ -172,6 +172,97 @@ func TestTeardownRemovesEverything(t *testing.T) {
 	}
 }
 
+func TestProvisionRunsDiscordBrokerWhenConfigured(t *testing.T) {
+	d, calls := recordingDocker()
+	p := &DockerProvisioner{D: d, AgentImage: "i", ProxyImage: "px", DindImage: "docker:dind",
+		DiscordImage: "quack-discord-broker:latest"}
+	_, err := p.Provision(context.Background(), Spec{
+		SessionName: "q", EgressAllow: []string{"x"},
+		DiscordBotToken: "BOTTOKEN", DiscordReadGuildID: "G",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{
+		"--name quack-q-discord",
+		"quack-discord-broker:latest",
+		"GUILD_ID=G",
+		"--network-alias quack-discord",               // stable in-sandbox hostname
+		"network connect quack-q-ext quack-q-discord", // egress to discord.com
+	} {
+		if !hasCall(*calls, want) {
+			t.Fatalf("missing broker call %q in %v", want, *calls)
+		}
+	}
+	// The agent must reach the broker directly, not through the CONNECT-only proxy.
+	if !hasCall(*calls, "NO_PROXY=docker,quack-discord") {
+		t.Fatalf("agent NO_PROXY must include the broker alias: %v", *calls)
+	}
+}
+
+func TestProvisionSkipsBrokerWhenImageUnset(t *testing.T) {
+	d, calls := recordingDocker()
+	p := &DockerProvisioner{D: d, AgentImage: "i", ProxyImage: "px", DindImage: "docker:dind"} // no DiscordImage
+	_, err := p.Provision(context.Background(), Spec{
+		SessionName: "q", EgressAllow: []string{"x"},
+		DiscordBotToken: "BOTTOKEN", DiscordReadGuildID: "G",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if hasCall(*calls, "quack-q-discord") {
+		t.Fatalf("broker must not run when DiscordImage is unset: %v", *calls)
+	}
+	if hasCall(*calls, "quack-discord") {
+		t.Fatalf("NO_PROXY must not name the broker when it isn't run: %v", *calls)
+	}
+}
+
+func TestProvisionSkipsBrokerWhenGuildUnset(t *testing.T) {
+	d, calls := recordingDocker()
+	p := &DockerProvisioner{D: d, AgentImage: "i", ProxyImage: "px", DindImage: "docker:dind",
+		DiscordImage: "quack-discord-broker:latest"}
+	_, err := p.Provision(context.Background(), Spec{
+		SessionName: "q", EgressAllow: []string{"x"}, DiscordBotToken: "BOTTOKEN", // no guild id
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if hasCall(*calls, "quack-q-discord") {
+		t.Fatalf("broker must not run without a read guild id: %v", *calls)
+	}
+}
+
+func TestTeardownRemovesBroker(t *testing.T) {
+	d, calls := recordingDocker()
+	p := &DockerProvisioner{D: d}
+	h := &Handle{AgentContainer: "a", DindContainer: "dd", ProxyContainer: "px", DiscordContainer: "dc",
+		IntNetwork: "int", ExtNetwork: "ext", CertVolume: "cv", WorkVolume: "wv"}
+	if err := p.Teardown(context.Background(), h); err != nil {
+		t.Fatal(err)
+	}
+	if !hasCall(*calls, "rm -f dc") {
+		t.Fatalf("teardown must remove the broker container: %v", *calls)
+	}
+}
+
+func TestReattachStartsBroker(t *testing.T) {
+	var calls [][]string
+	d := &Docker{run: func(ctx context.Context, name string, args ...string) ([]byte, error) {
+		calls = append(calls, append([]string{name}, args...))
+		return []byte("ok"), nil // inspect succeeds -> agent exists
+	}}
+	p := &DockerProvisioner{D: d}
+	h := &Handle{AgentContainer: "quack-q-agent", DindContainer: "quack-q-dind",
+		ProxyContainer: "quack-q-proxy", DiscordContainer: "quack-q-discord"}
+	if err := p.Reattach(context.Background(), h, Spec{}); err != nil {
+		t.Fatal(err)
+	}
+	if !hasCall(calls, "start quack-q-discord") {
+		t.Fatalf("reattach should start the broker container; calls=%v", calls)
+	}
+}
+
 func TestLauncherBindsAgentContainer(t *testing.T) {
 	p := &DockerProvisioner{}
 	l := p.Launcher(&Handle{AgentContainer: "q-agent", Workdir: "/work/r"})

@@ -29,29 +29,37 @@ type Spec struct {
 	CredFiles    []Mount
 	AgentEnv     []string
 	EgressAllow  []string
+
+	// DiscordBotToken + DiscordReadGuildID enable the read-only Discord broker
+	// sidecar. Secret/non-persisted (re-sourced from config on Reattach). The
+	// broker runs only when both are set and the provisioner has a DiscordImage.
+	DiscordBotToken    string
+	DiscordReadGuildID string
 }
 
 // Handle identifies a provisioned sandbox. Persisted in the session record —
 // so it holds only non-secret identifiers.
 type Handle struct {
-	Name           string `json:"name"`
-	AgentContainer string `json:"agent_container"`
-	DindContainer  string `json:"dind_container"`
-	ProxyContainer string `json:"proxy_container"`
-	IntNetwork     string `json:"int_network"`
-	ExtNetwork     string `json:"ext_network"`
-	CertVolume     string `json:"cert_volume"`
-	WorkVolume     string `json:"work_volume"`
-	Workdir        string `json:"workdir"`
+	Name             string `json:"name"`
+	AgentContainer   string `json:"agent_container"`
+	DindContainer    string `json:"dind_container"`
+	ProxyContainer   string `json:"proxy_container"`
+	DiscordContainer string `json:"discord_container,omitempty"`
+	IntNetwork       string `json:"int_network"`
+	ExtNetwork       string `json:"ext_network"`
+	CertVolume       string `json:"cert_volume"`
+	WorkVolume       string `json:"work_volume"`
+	Workdir          string `json:"workdir"`
 }
 
 // DockerProvisioner provisions guest sandboxes using the Docker CLI.
 type DockerProvisioner struct {
-	D          *Docker
-	AgentImage string
-	ProxyImage string
-	DindImage  string
-	ProxyPort  string // default "8888"
+	D            *Docker
+	AgentImage   string
+	ProxyImage   string
+	DindImage    string
+	DiscordImage string // read-only Discord broker image; "" disables the broker
+	ProxyPort    string // default "8888"
 }
 
 func sanitize(s string) string {
@@ -70,15 +78,16 @@ func sanitize(s string) string {
 func (p *DockerProvisioner) handleFor(sessionName string) *Handle {
 	n := sanitize(sessionName)
 	return &Handle{
-		Name:           n,
-		AgentContainer: "quack-" + n + "-agent",
-		DindContainer:  "quack-" + n + "-dind",
-		ProxyContainer: "quack-" + n + "-proxy",
-		IntNetwork:     "quack-" + n + "-int",
-		ExtNetwork:     "quack-" + n + "-ext",
-		CertVolume:     "quack-" + n + "-certs",
-		WorkVolume:     "quack-" + n + "-work",
-		Workdir:        "/work",
+		Name:             n,
+		AgentContainer:   "quack-" + n + "-agent",
+		DindContainer:    "quack-" + n + "-dind",
+		ProxyContainer:   "quack-" + n + "-proxy",
+		DiscordContainer: "quack-" + n + "-discord",
+		IntNetwork:       "quack-" + n + "-int",
+		ExtNetwork:       "quack-" + n + "-ext",
+		CertVolume:       "quack-" + n + "-certs",
+		WorkVolume:       "quack-" + n + "-work",
+		Workdir:          "/work",
 	}
 }
 
@@ -87,6 +96,26 @@ func (p *DockerProvisioner) port() string {
 		return "8888"
 	}
 	return p.ProxyPort
+}
+
+// The read-only Discord broker sidecar is reached by the agent at a stable
+// internal-network alias and port, so the in-sandbox URL is the same for every
+// session.
+const (
+	discordBrokerAlias = "quack-discord"
+	discordBrokerPort  = "8080"
+)
+
+// DiscordBrokerURL is the in-sandbox base URL the agent uses to reach the
+// read-only Discord broker.
+func DiscordBrokerURL() string {
+	return "http://" + discordBrokerAlias + ":" + discordBrokerPort
+}
+
+// brokerEnabled reports whether the read-only Discord broker should run for this
+// session: it needs an image and both secrets (bot token + read guild id).
+func (p *DockerProvisioner) brokerEnabled(spec Spec) bool {
+	return p.DiscordImage != "" && spec.DiscordBotToken != "" && spec.DiscordReadGuildID != ""
 }
 
 // bringUp creates the networks, volumes, proxy, dind sidecar, and agent
@@ -134,6 +163,28 @@ func (p *DockerProvisioner) bringUp(ctx context.Context, h *Handle, spec Spec) e
 		return err
 	}
 
+	// Read-only Discord broker sidecar (optional). Holds quack's bot token and
+	// exposes a read-only, public-channels-only, single-guild HTTP API the agent
+	// reaches at http://quack-discord:<port> over the internal net — so no Discord
+	// credential ever enters the agent container. Internal net (agent reaches it,
+	// aliased "quack-discord") + external net (it reaches discord.com), like the
+	// proxy. Runs only when configured.
+	noProxy := "docker,localhost,127.0.0.1"
+	if p.brokerEnabled(spec) {
+		if err := p.D.Run(ctx, "--name", h.DiscordContainer,
+			"--network", h.IntNetwork, "--network-alias", discordBrokerAlias,
+			"-e", "DISCORD_BOT_TOKEN="+spec.DiscordBotToken,
+			"-e", "GUILD_ID="+spec.DiscordReadGuildID,
+			"-e", "ADDR=:"+discordBrokerPort,
+			p.DiscordImage); err != nil {
+			return err
+		}
+		if err := p.D.ConnectNetwork(ctx, h.ExtNetwork, h.DiscordContainer); err != nil {
+			return err
+		}
+		noProxy = "docker," + discordBrokerAlias + ",localhost,127.0.0.1"
+	}
+
 	// Agent container: internal net only (no direct egress).
 	runArgs := []string{
 		"--name", h.AgentContainer,
@@ -142,7 +193,7 @@ func (p *DockerProvisioner) bringUp(ctx context.Context, h *Handle, spec Spec) e
 		"-v", h.CertVolume + ":/certs:ro",
 		"-e", "HTTPS_PROXY=http://" + h.ProxyContainer + ":" + port,
 		"-e", "HTTP_PROXY=http://" + h.ProxyContainer + ":" + port,
-		"-e", "NO_PROXY=docker,localhost,127.0.0.1",
+		"-e", "NO_PROXY=" + noProxy,
 		"-e", "DOCKER_HOST=tcp://docker:2376",
 		"-e", "DOCKER_TLS_VERIFY=1",
 		"-e", "DOCKER_CERT_PATH=/certs/client",
@@ -276,7 +327,7 @@ func repoBase(url string) string {
 // Teardown removes the whole container set. Best-effort: continues past
 // individual failures so a partial provision can still be cleaned up.
 func (p *DockerProvisioner) Teardown(ctx context.Context, h *Handle) error {
-	for _, c := range []string{h.AgentContainer, h.DindContainer, h.ProxyContainer} {
+	for _, c := range []string{h.AgentContainer, h.DindContainer, h.ProxyContainer, h.DiscordContainer} {
 		if c != "" {
 			_ = p.D.Remove(ctx, c)
 		}
@@ -314,6 +365,9 @@ func (p *DockerProvisioner) Reattach(ctx context.Context, h *Handle, spec Spec) 
 	if p.D.Exists(ctx, h.AgentContainer) {
 		_ = p.D.Start(ctx, h.ProxyContainer)
 		_ = p.D.Start(ctx, h.DindContainer)
+		if h.DiscordContainer != "" { // older sandboxes predate the broker
+			_ = p.D.Start(ctx, h.DiscordContainer)
+		}
 		_ = p.D.Start(ctx, h.AgentContainer)
 		return nil
 	}

@@ -37,43 +37,47 @@ func toSpec(s session.SandboxSpec) Spec {
 		mounts[i] = Mount{Host: m.Host, Container: m.Container}
 	}
 	return Spec{
-		SessionName:  s.SessionName,
-		RepoURL:      s.RepoURL,
-		CloneRef:     s.CloneRef,
-		RepoDir:      s.RepoDir,
-		GitHubPAT:    s.GitHubPAT,
-		GitUserName:  s.GitUserName,
-		GitUserEmail: s.GitUserEmail,
-		CredFiles:    mounts,
-		AgentEnv:     s.AgentEnv,
-		EgressAllow:  s.EgressAllow,
+		SessionName:        s.SessionName,
+		RepoURL:            s.RepoURL,
+		CloneRef:           s.CloneRef,
+		RepoDir:            s.RepoDir,
+		GitHubPAT:          s.GitHubPAT,
+		GitUserName:        s.GitUserName,
+		GitUserEmail:       s.GitUserEmail,
+		CredFiles:          mounts,
+		AgentEnv:           s.AgentEnv,
+		EgressAllow:        s.EgressAllow,
+		DiscordBotToken:    s.DiscordBotToken,
+		DiscordReadGuildID: s.DiscordReadGuildID,
 	}
 }
 
 func toSessionHandle(h *Handle) *session.SandboxHandle {
 	return &session.SandboxHandle{
-		Name:           h.Name,
-		AgentContainer: h.AgentContainer,
-		DindContainer:  h.DindContainer,
-		ProxyContainer: h.ProxyContainer,
-		IntNetwork:     h.IntNetwork,
-		ExtNetwork:     h.ExtNetwork,
-		CertVolume:     h.CertVolume,
-		WorkVolume:     h.WorkVolume,
-		Workdir:        h.Workdir,
+		Name:             h.Name,
+		AgentContainer:   h.AgentContainer,
+		DindContainer:    h.DindContainer,
+		ProxyContainer:   h.ProxyContainer,
+		DiscordContainer: h.DiscordContainer,
+		IntNetwork:       h.IntNetwork,
+		ExtNetwork:       h.ExtNetwork,
+		CertVolume:       h.CertVolume,
+		WorkVolume:       h.WorkVolume,
+		Workdir:          h.Workdir,
 	}
 }
 
 func fromSessionHandle(h *session.SandboxHandle) *Handle {
 	return &Handle{
-		Name:           h.Name,
-		AgentContainer: h.AgentContainer,
-		DindContainer:  h.DindContainer,
-		ProxyContainer: h.ProxyContainer,
-		IntNetwork:     h.IntNetwork,
-		ExtNetwork:     h.ExtNetwork,
-		CertVolume:     h.CertVolume,
-		WorkVolume:     h.WorkVolume,
-		Workdir:        h.Workdir,
+		Name:             h.Name,
+		AgentContainer:   h.AgentContainer,
+		DindContainer:    h.DindContainer,
+		ProxyContainer:   h.ProxyContainer,
+		DiscordContainer: h.DiscordContainer,
+		IntNetwork:       h.IntNetwork,
+		ExtNetwork:       h.ExtNetwork,
+		CertVolume:       h.CertVolume,
+		WorkVolume:       h.WorkVolume,
+		Workdir:          h.Workdir,
 	}
 }
