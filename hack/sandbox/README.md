@@ -1,12 +1,13 @@
 # Guest sandbox images
 
 quack confines **guest** (non-owner) sessions to per-session Docker sandboxes.
-Two images back that:
+These images back that:
 
 | Image | Built from | Role |
 |-------|-----------|------|
 | `quack-sandbox:latest` | `hack/sandbox/Dockerfile` | the **agent** container — runs `claude`/`codex`, holds the per-session clone + injected creds, talks to the dind sidecar |
 | `quack-egress:latest` | `hack/sandbox/proxy/Dockerfile` | the **egress proxy** — allow-list CONNECT proxy the agent's `HTTPS_PROXY` points at (model API + GitHub only) |
+| `quack-discord-broker:latest` | `hack/sandbox/discord-broker/Dockerfile` | the **read-only Discord broker** (optional) — holds the bot token and exposes a read-only, public-channels-only, single-guild HTTP API the agent reaches over the internal network. Only runs when `[guest].discord_read_guild_id` is set |
 
 The `docker:dind` sidecar image is pulled directly from Docker Hub (configurable
 via `[guest].dind_image`).
@@ -14,11 +15,14 @@ via `[guest].dind_image`).
 ## Build (setup prerequisite)
 
 ```sh
-docker build -t quack-sandbox:latest hack/sandbox
-docker build -t quack-egress:latest  hack/sandbox/proxy
+docker build -t quack-sandbox:latest        hack/sandbox
+docker build -t quack-egress:latest         hack/sandbox/proxy
+docker build -t quack-discord-broker:latest hack/sandbox/discord-broker  # optional; only if using the Discord broker
 ```
 
-Image names are overridable in config (`[guest].image`, `[guest].proxy_image`).
+Image names are overridable in config (`[guest].image`, `[guest].proxy_image`,
+`[guest].discord_broker_image`). The Discord broker is described in
+`hack/designs/2026-06-18-sandbox-discord-broker.md`.
 
 ## How a guest session is wired
 

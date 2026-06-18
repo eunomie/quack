@@ -138,6 +138,14 @@ permission_mode = "auto"
 # proxy_image    = "quack-egress:latest"    # egress allow-list proxy image
 # dind_image     = "docker:dind"            # docker-in-docker sidecar
 # proxy_port     = "8888"
+# Read-only Discord broker sidecar. Set discord_read_guild_id to the ONE guild
+# whose PUBLIC channels a sandboxed agent may read (e.g. your community server).
+# A per-session broker container then holds the bot token and exposes a read-only
+# HTTP API the agent reaches over the internal network — no Discord credential
+# enters the agent container. Inert (no broker) when discord_read_guild_id is
+# empty. Build the image: docker build -t quack-discord-broker:latest hack/sandbox/discord-broker
+# discord_broker_image = "quack-discord-broker:latest"
+# discord_read_guild_id = "YOUR_GUILD_ID"
 # Push credential: a FINE-GRAINED, revocable GitHub PAT (HTTPS; no SSH key ever
 # enters the sandbox). Prefer the QUACK_GUEST_GITHUB_PAT env var over the file.
 # github_pat     = "github_pat_..."

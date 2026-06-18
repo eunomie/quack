@@ -295,7 +295,14 @@ OAuth tokens can refresh inside the jail. The image pre-installs `dagger` (its
 engine runs on the dind sidecar), so sharing `~/.config/dagger` lets guest dagger
 runs land in the owner's Cloud org. The agent container sits on an `--internal`
 network with no direct egress — its only route out is an allow-listing proxy
-(`hack/sandbox/proxy`), restricting it to the model API + GitHub + dagger Cloud. Guests are forced headless, may target
+(`hack/sandbox/proxy`), restricting it to the model API + GitHub + dagger Cloud.
+An optional third sidecar, the **read-only Discord broker**
+(`hack/sandbox/discord-broker`, enabled by `[guest].discord_read_guild_id`),
+holds quack's bot token and exposes a read-only, public-channels-only,
+single-guild HTTP API the agent reaches at `http://quack-discord:8080` over the
+internal net — so a sandboxed agent can read public Discord channels (and re-read
+its own thread) without any Discord credential entering its container; see
+`hack/designs/2026-06-18-sandbox-discord-broker.md`. Guests are forced headless, may target
 only a repo ref (cloned fresh inside the jail) or nothing (empty sandbox) — never
 a host path, `temp-dir`, or `no-wt` (`clampGuestDirective`/`guestTargetAllowed`).
 Guest tools are restricted (claude `--disallowedTools`, e.g. block `open-zed`,
