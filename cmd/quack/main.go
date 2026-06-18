@@ -125,13 +125,14 @@ func main() {
 		// any guest first.
 		if len(cfg.Discord.GuestRoles()) > 0 || cfg.Guest.GitHubPAT != "" {
 			prov := &sandbox.DockerProvisioner{
-				D:          sandbox.NewDocker(),
-				AgentImage: cfg.Guest.Image,
-				ProxyImage: cfg.Guest.ProxyImage,
-				DindImage:  cfg.Guest.DindImage,
-				ProxyPort:  cfg.Guest.ProxyPort,
+				D:            sandbox.NewDocker(),
+				AgentImage:   cfg.Guest.Image,
+				ProxyImage:   cfg.Guest.ProxyImage,
+				DindImage:    cfg.Guest.DindImage,
+				DiscordImage: cfg.Guest.DiscordBrokerImage,
+				ProxyPort:    cfg.Guest.ProxyPort,
 			}
-			svc.UseSandbox(sandbox.Adapter{P: prov}, session.GuestPolicy{
+			policy := session.GuestPolicy{
 				GitHubPAT:        cfg.Guest.GitHubPAT,
 				GitUserName:      cfg.Guest.GitUserName,
 				GitUserEmail:     cfg.Guest.GitUserEmail,
@@ -142,7 +143,16 @@ func main() {
 				DisallowedTools:  cfg.Guest.DisallowedTools,
 				DisallowedSkills: cfg.Guest.DisallowedSkills,
 				AllowedSkills:    cfg.Guest.AllowedSkills,
-			})
+			}
+			// Read-only Discord broker: wired only when a read guild is configured.
+			// The bot token is held by the broker sidecar; the agent only learns the
+			// broker URL.
+			if cfg.Guest.DiscordReadGuildID != "" {
+				policy.DiscordBotToken = cfg.Discord.Token
+				policy.DiscordReadGuildID = cfg.Guest.DiscordReadGuildID
+				policy.DiscordBrokerURL = sandbox.DiscordBrokerURL()
+			}
+			svc.UseSandbox(sandbox.Adapter{P: prov}, policy)
 		}
 		return svc
 	})

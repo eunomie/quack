@@ -97,20 +97,26 @@ type SandboxSpec struct {
 	CredFiles    []SandboxMount
 	AgentEnv     []string
 	EgressAllow  []string
+
+	// DiscordBotToken + DiscordReadGuildID enable the read-only Discord broker
+	// sidecar. Secrets, sourced from config at call time — never persisted.
+	DiscordBotToken    string
+	DiscordReadGuildID string
 }
 
 // SandboxHandle identifies a provisioned sandbox. Persisted in the session
 // record, so it holds only non-secret identifiers.
 type SandboxHandle struct {
-	Name           string `json:"name"`
-	AgentContainer string `json:"agent_container"`
-	DindContainer  string `json:"dind_container"`
-	ProxyContainer string `json:"proxy_container"`
-	IntNetwork     string `json:"int_network"`
-	ExtNetwork     string `json:"ext_network"`
-	CertVolume     string `json:"cert_volume"`
-	WorkVolume     string `json:"work_volume"`
-	Workdir        string `json:"workdir"`
+	Name             string `json:"name"`
+	AgentContainer   string `json:"agent_container"`
+	DindContainer    string `json:"dind_container"`
+	ProxyContainer   string `json:"proxy_container"`
+	DiscordContainer string `json:"discord_container,omitempty"`
+	IntNetwork       string `json:"int_network"`
+	ExtNetwork       string `json:"ext_network"`
+	CertVolume       string `json:"cert_volume"`
+	WorkVolume       string `json:"work_volume"`
+	Workdir          string `json:"workdir"`
 }
 
 // Sandboxer provisions/tears down the per-guest-session container set. The
@@ -137,6 +143,14 @@ type GuestPolicy struct {
 	DisallowedTools  string
 	DisallowedSkills []string
 	AllowedSkills    []string
+
+	// Read-only Discord broker. DiscordReadGuildID is the one guild whose public
+	// channels a sandboxed agent may read; DiscordBotToken authenticates the
+	// broker (held only by the broker sidecar). DiscordBrokerURL is the in-sandbox
+	// base URL surfaced to the agent — non-empty only when the broker is enabled.
+	DiscordBotToken    string
+	DiscordReadGuildID string
+	DiscordBrokerURL   string
 }
 
 // Status reactions placed on the user's own triggering message.
@@ -393,6 +407,11 @@ func (s *Service) run(ctx context.Context, req Request, dir *command.Directive, 
 	}
 
 	fullPrompt := req.Origin.PromptHeader() + "\n\n" + dir.Prompt
+	if sandboxed {
+		if block := s.discordPromptBlock(req.Origin.ThreadID); block != "" {
+			fullPrompt += "\n\n" + block
+		}
+	}
 	if block := s.saveAttachments(ctx, prep.name, req.Attachments); block != "" {
 		fullPrompt += "\n\n" + block
 	}

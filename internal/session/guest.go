@@ -40,12 +40,14 @@ func guestTargetAllowed(target string) error {
 // clone URL is HTTPS (the injected PAT authenticates; no SSH key in the jail).
 func (s *Service) prepareGuest(ctx context.Context, dir *command.Directive, name string) (prepResult, error) {
 	spec := SandboxSpec{
-		SessionName:  name,
-		GitHubPAT:    s.guest.GitHubPAT,
-		GitUserName:  s.guest.GitUserName,
-		GitUserEmail: s.guest.GitUserEmail,
-		EgressAllow:  s.guest.EgressAllow,
-		CredFiles:    s.guest.CredFiles,
+		SessionName:        name,
+		GitHubPAT:          s.guest.GitHubPAT,
+		GitUserName:        s.guest.GitUserName,
+		GitUserEmail:       s.guest.GitUserEmail,
+		EgressAllow:        s.guest.EgressAllow,
+		CredFiles:          s.guest.CredFiles,
+		DiscordBotToken:    s.guest.DiscordBotToken,
+		DiscordReadGuildID: s.guest.DiscordReadGuildID,
 	}
 	// Guest sandboxes are dedicated to default_repo (dagger/dagger): a request that
 	// names no repo clones the default rather than standing up an empty sandbox.
@@ -84,13 +86,34 @@ func (s *Service) prepareGuest(ctx context.Context, dir *command.Directive, name
 // path does not re-clone (the work volume persists the clone).
 func (s *Service) guestReattachSpec(rec sessionRecord) SandboxSpec {
 	return SandboxSpec{
-		SessionName:  rec.Name,
-		GitHubPAT:    s.guest.GitHubPAT,
-		GitUserName:  s.guest.GitUserName,
-		GitUserEmail: s.guest.GitUserEmail,
-		EgressAllow:  s.guest.EgressAllow,
-		CredFiles:    s.guest.CredFiles,
+		SessionName:        rec.Name,
+		GitHubPAT:          s.guest.GitHubPAT,
+		GitUserName:        s.guest.GitUserName,
+		GitUserEmail:       s.guest.GitUserEmail,
+		EgressAllow:        s.guest.EgressAllow,
+		CredFiles:          s.guest.CredFiles,
+		DiscordBotToken:    s.guest.DiscordBotToken,
+		DiscordReadGuildID: s.guest.DiscordReadGuildID,
 	}
+}
+
+// discordPromptBlock renders the <quack-discord> guidance appended to a
+// sandboxed session's first prompt when the read-only Discord broker is enabled.
+// It tells the agent how to read public channels (and re-read its own thread to
+// recover context). Empty when the broker is off.
+func (s *Service) discordPromptBlock(threadID string) string {
+	if s.guest.DiscordBrokerURL == "" {
+		return ""
+	}
+	return fmt.Sprintf(`<quack-discord>
+You can read this Discord server's PUBLIC channels (read-only) via a local broker — plain HTTP GET, no auth, base URL %s:
+  GET /channels                                               list public text/forum channels
+  GET /channels/{id}                                          channel metadata
+  GET /channels/{id}/messages?limit=&before=&after=&contains= message history (newest first; contains= filters that page)
+  GET /channels/{id}/threads                                  active public threads under a channel
+This session's own Discord thread id is %s — GET /channels/%s/messages to re-read it (e.g. to recover lost context).
+Only public channels of guild %s are reachable; there is no search (read history and filter with contains=).
+</quack-discord>`, s.guest.DiscordBrokerURL, threadID, threadID, s.guest.DiscordReadGuildID)
 }
 
 // guestDriver returns the agent driver for guest sessions: the base driver with

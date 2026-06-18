@@ -17,6 +17,12 @@ type Guest struct {
 	DisallowedTools  string   `toml:"disallowed_tools"` // claude --disallowedTools for guests
 	DisallowedSkills []string `toml:"disallowed_skills"`
 	AllowedSkills    []string `toml:"allowed_skills"`
+
+	// Read-only Discord broker sidecar. Enabled only when DiscordReadGuildID is
+	// set (and the bot token is available); lets a sandboxed agent read public
+	// channels of that one guild without any Discord credential in its container.
+	DiscordBrokerImage string `toml:"discord_broker_image"` // default quack-discord-broker:latest
+	DiscordReadGuildID string `toml:"discord_read_guild_id"`
 }
 
 // WithDefaults fills unset fields with sensible defaults.
@@ -35,6 +41,9 @@ func (g Guest) WithDefaults() Guest {
 	}
 	if g.DefaultRepo == "" {
 		g.DefaultRepo = "dagger/dagger"
+	}
+	if g.DiscordBrokerImage == "" {
+		g.DiscordBrokerImage = "quack-discord-broker:latest"
 	}
 	if len(g.EgressAllow) == 0 {
 		g.EgressAllow = []string{
