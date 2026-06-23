@@ -82,6 +82,14 @@ func TestMapInferred_DefaultsWhenOmitted(t *testing.T) {
 	}
 }
 
+func TestMapInferred_MaxEffortPassesThrough(t *testing.T) {
+	agents := map[string]agent.Agent{"claude": {Command: "claude"}}
+	dir := mapInferred(inferred{Agent: "claude", Effort: "max"}, agents, "do it")
+	if dir.Effort != "max" {
+		t.Errorf("max effort should pass through, got %q", dir.Effort)
+	}
+}
+
 func TestMapInferred_FableAgent(t *testing.T) {
 	// When a fable agent is configured, the infer step may route to it.
 	agents := map[string]agent.Agent{

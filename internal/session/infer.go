@@ -27,7 +27,7 @@ type inferred struct {
 
 // inferEfforts is the accepted effort vocabulary; anything else is dropped so a
 // hallucinated value can't reach the agent.
-var inferEfforts = map[string]bool{"low": true, "medium": true, "high": true, "xhigh": true}
+var inferEfforts = map[string]bool{"low": true, "medium": true, "high": true, "xhigh": true, "max": true}
 
 // extractJSON narrows raw model output to the outermost JSON object, stripping a
 // leading ```json / ``` fence and any surrounding prose. Returns "" if none.
@@ -98,7 +98,7 @@ Schema (all fields required):
 - base: base branch to start from, or "" for the repo default.
 - worktree: true to work in an isolated worktree (default); false only if the user explicitly wants to work directly in the checkout.
 - agent: "claude", "codex", "fable", or "" for the default. "fable" runs Claude on its most powerful model (claude-fable-5); pick it only when the user explicitly asks for fable or "the most powerful/best model".
-- effort: one of "low", "medium", "high", "xhigh", or "" for the default; pick higher for harder tasks.
+- effort: one of "low", "medium", "high", "xhigh", "max", or "" for the default; pick higher for harder tasks ("max" is the highest).
 - name: a short lowercase kebab-case branch name (2-4 words) describing the task.
 - headless: true (default) for a Discord conversation; false only if the user explicitly asks for an interactive or tmux session.
 - context: if the request refers to something discussed earlier (e.g. "this feature", "that bug"), resolve it into one short paragraph using the conversation below; otherwise "".
