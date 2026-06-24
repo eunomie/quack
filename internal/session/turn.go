@@ -29,6 +29,14 @@ type turnRender struct {
 
 	pending []string
 	posted  bool
+
+	// continuation marks a render the agent drove on its own — a background task
+	// it started completed and re-invoked it after its turn ended — rather than
+	// one a user message triggered. It holds no idle slot, warrants no "(no text
+	// response)" placeholder if it stays silent, and hangs its status off contTr
+	// (the most recent turn's trigger, captured when the continuation opened).
+	continuation bool
+	contTr       turnReq
 }
 
 func newTurnRender(s *Service, ls *liveSession) *turnRender {
@@ -113,7 +121,7 @@ func (s *Service) beginTurnStatus(ctx context.Context, ls *liveSession, tr turnR
 // endTurnDone applies a turn's terminal status: clears the per-turn working
 // marker, then posts the answer / error and sets the done/error status. Shared by
 // both loops.
-func (s *Service) endTurnDone(ctx context.Context, ls *liveSession, tr turnReq, isRoot bool, err error, posted bool) {
+func (s *Service) endTurnDone(ctx context.Context, ls *liveSession, tr turnReq, isRoot bool, err error, posted, continuation bool) {
 	if !isRoot {
 		_ = s.reply.Unreact(ctx, tr.channelID, tr.messageID, emojiWorking)
 	}
@@ -125,7 +133,9 @@ func (s *Service) endTurnDone(ctx context.Context, ls *liveSession, tr turnReq, 
 		_, _ = s.reply.Post(ctx, ls.threadID, "error: "+err.Error())
 		return
 	}
-	if !posted {
+	// A continuation that stayed silent posts nothing: it's a background follow-up
+	// the user never prompted, so a "(no text response)" placeholder would be noise.
+	if !posted && !continuation {
 		_, _ = s.reply.Post(ctx, ls.threadID, answerOrPlaceholder(""))
 	}
 	if !isRoot {

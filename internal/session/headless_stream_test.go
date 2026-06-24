@@ -191,6 +191,40 @@ func TestStream_MidTurnInterjection(t *testing.T) {
 	}
 }
 
+// A background task the agent kicked off completes after its turn ended, so the
+// harness re-invokes the agent with no user message in between. The follow-up it
+// produces arrives while nothing is in flight; it must still reach the thread
+// instead of being dropped, and must drive the root status back through done.
+func TestStream_BackgroundContinuationRenders(t *testing.T) {
+	sess := newFakeStreamSession("sess-1")
+	d := newFakeStreamDriver(sess)
+	svc, r := newStreamService(d)
+
+	svc.startHeadless(context.Background(), "claude", "thread-1", "/wt", "", "demo", "",
+		RoleOwner, nil, "owner", turnReq{channelID: "c", messageID: "m1", text: "kick off a background build"})
+	<-d.opened
+	waitFor(t, "first send", func() bool { return sess.sentCount() == 1 })
+
+	// First turn ends: the agent backgrounded the work and stopped talking.
+	sess.emit(agentproc.AssistantText{Text: "Build started in the background."})
+	sess.emit(agentproc.TurnComplete{})
+	svc.waitIdle("thread-1")
+
+	// The build finishes; the harness re-invokes the agent with no user turn. Its
+	// unprompted follow-up arrives while the inflight FIFO is empty.
+	sess.emit(agentproc.AssistantText{Text: "Build finished: all green."})
+	sess.emit(agentproc.TurnComplete{})
+
+	waitFor(t, "background follow-up posted", func() bool {
+		return anyContains(r.posts, "Build finished: all green.")
+	})
+	// The continuation drove the global status through working back to done — it
+	// neither stays stuck on working nor goes silent.
+	if last := lastReactOn(r.reacts, "c|m1"); last != emojiDone {
+		t.Fatalf("root status = %q, want done after continuation", last)
+	}
+}
+
 func TestStream_StopClosesSession(t *testing.T) {
 	sess := newFakeStreamSession("sess-1")
 	d := newFakeStreamDriver(sess)

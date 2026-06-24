@@ -126,6 +126,7 @@ func (s *Service) newSession(ctx context.Context, rec sessionRecord) *liveSessio
 		pendingHandoff: rec.PendingHandoff,
 		rootChannelID:  rec.RootChannelID,
 		rootMessageID:  rec.RootMessageID,
+		lastTr:         turnReq{channelID: rec.RootChannelID, messageID: rec.RootMessageID},
 		authorID:       rec.AuthorID,
 		role:           rec.Role,
 

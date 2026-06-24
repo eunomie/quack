@@ -74,6 +74,12 @@ type liveSession struct {
 	rootMessageID   string
 	lastGlobalEmoji string
 
+	// lastTr is the trigger of the most recent turn, used to attribute an
+	// unprompted background continuation (see streamReopen) to a sensible
+	// message. Until a turn has run it points at the root message. Owned by the
+	// stream loop goroutine.
+	lastTr turnReq
+
 	// sess is the live streaming process for a StreamDriver (claude). It is owned
 	// by the stream loop goroutine — opened lazily on the first turn and reopened
 	// (resuming by ref) if the process dies. nil for the per-turn (codex) path.
@@ -468,5 +474,5 @@ func (s *Service) runTurn(ctx context.Context, ls *liveSession, tr turnReq) {
 	}
 	rend.finalizeTools(ctx)      // any trailing tool steps
 	rend.flushPending(ctx, true) // the trailing text run, with no tool after it, is the answer
-	s.endTurnDone(ctx, ls, tr, isRoot, done.Err, rend.posted)
+	s.endTurnDone(ctx, ls, tr, isRoot, done.Err, rend.posted, false)
 }

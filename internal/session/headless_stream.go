@@ -2,6 +2,7 @@ package session
 
 import (
 	"context"
+	"strings"
 
 	"github.com/eunomie/quack/internal/agentproc"
 )
@@ -50,8 +51,9 @@ func (s *Service) runStreamLoop(ctx context.Context, ls *liveSession) {
 		// accept an interjection, or stop.
 		select {
 		case tr := <-ls.queue:
-			// Cut off the in-flight turn so the agent reads this message next.
-			if len(inflight) > 0 {
+			// Cut off whatever is streaming — an in-flight turn or an unprompted
+			// background continuation — so the agent reads this message next.
+			if rend != nil {
 				_ = ls.sess.Interrupt()
 			}
 			s.streamBegin(ctx, ls, &inflight, &rend, tr)
@@ -94,31 +96,63 @@ func (s *Service) streamBegin(ctx context.Context, ls *liveSession, inflight *[]
 	isRoot := ls.isRootTurn(tr)
 	s.beginTurnStatus(ctx, ls, tr, isRoot)
 	_ = ls.sess.Send(ls.consumeHandoff(tr.text))
-	wasEmpty := len(*inflight) == 0
 	*inflight = append(*inflight, tr)
-	if wasEmpty {
+	ls.lastTr = tr
+	// Open a renderer only when nothing is streaming. If a turn (or a background
+	// continuation) is already open, it keeps its renderer until its own (possibly
+	// interrupted) TurnComplete; advanceRender then hands this turn a fresh one.
+	if *rend == nil {
 		*rend = newTurnRender(s, ls)
 	}
 }
 
+// streamReopen opens a continuation render for output the agent produced with no
+// turn in flight: a background task it kicked off completed and the harness
+// re-invoked it after its turn had ended. Render the follow-up like any other
+// turn instead of dropping it. A continuation holds no idle slot (nothing was
+// enqueued for it) and hangs its status off the most recent turn's trigger (the
+// root message until a turn has run), captured now so a later interjection that
+// updates lastTr can't steal it.
+func (s *Service) streamReopen(ctx context.Context, ls *liveSession, rend **turnRender) {
+	tr := ls.lastTr
+	s.beginTurnStatus(ctx, ls, tr, ls.isRootTurn(tr))
+	r := newTurnRender(s, ls)
+	r.continuation = true
+	r.contTr = tr
+	*rend = r
+}
+
 // streamEvent renders one event from the live process. AssistantText/ToolActivity
-// feed the head turn's renderer; a TurnComplete finalizes the head and advances
-// to the next in-flight turn.
+// feed the open renderer — reopening one as a background continuation if the
+// agent spoke with no turn in flight; a TurnComplete finalizes the open turn and
+// advances to the next in-flight turn.
 func (s *Service) streamEvent(ctx context.Context, ls *liveSession, inflight *[]turnReq, rend **turnRender, ev agentproc.Event) {
 	switch e := ev.(type) {
 	case agentproc.AssistantText:
+		if *rend == nil && strings.TrimSpace(e.Text) != "" {
+			s.streamReopen(ctx, ls, rend)
+		}
 		if *rend != nil {
 			(*rend).handle(ctx, e.Text, false)
 		}
 	case agentproc.ToolActivity:
+		if *rend == nil && strings.TrimSpace(e.Label) != "" {
+			s.streamReopen(ctx, ls, rend)
+		}
 		if *rend != nil {
 			(*rend).handle(ctx, e.Label, true)
 		}
 	case agentproc.TurnComplete:
-		if len(*inflight) == 0 {
-			return // defensive: a result with no turn to attribute it to
+		if *rend == nil {
+			return // defensive: a result with no open turn to attribute it to
 		}
-		head := (*inflight)[0]
+		// A continuation has no inflight entry: attribute it to the trigger it
+		// captured when it opened, and don't pop the FIFO or release an idle slot.
+		cont := (*rend).continuation
+		head := (*rend).contTr
+		if !cont {
+			head = (*inflight)[0]
+		}
 		isRoot := ls.isRootTurn(head)
 
 		// Persist the latest resume token so a restart resumes the newest turn.
@@ -129,8 +163,10 @@ func (s *Service) streamEvent(ctx context.Context, ls *liveSession, inflight *[]
 
 		// Stopped mid-turn: cancelled on purpose, stay quiet (StopThread closes up).
 		if ctx.Err() != nil {
-			*inflight = (*inflight)[1:]
-			ls.idle.Done()
+			if !cont {
+				*inflight = (*inflight)[1:]
+				ls.idle.Done()
+			}
 			s.advanceRender(ls, rend, *inflight)
 			return
 		}
@@ -144,17 +180,23 @@ func (s *Service) streamEvent(ctx context.Context, ls *liveSession, inflight *[]
 			if !isRoot {
 				_ = s.reply.Unreact(ctx, head.channelID, head.messageID, emojiWorking)
 			}
-			*inflight = (*inflight)[1:]
+			if !cont {
+				*inflight = (*inflight)[1:]
+			}
 			// If nothing follows (an interrupt with no successor, e.g. a stray
 			// error_during_execution), don't leave the global stuck on working.
 			if len(*inflight) == 0 {
 				s.clearGlobalWorking(ctx, ls)
 			}
 		} else {
-			s.endTurnDone(ctx, ls, head, isRoot, e.Err, (*rend).posted)
-			*inflight = (*inflight)[1:]
+			s.endTurnDone(ctx, ls, head, isRoot, e.Err, (*rend).posted, cont)
+			if !cont {
+				*inflight = (*inflight)[1:]
+			}
 		}
-		ls.idle.Done()
+		if !cont {
+			ls.idle.Done()
+		}
 		s.advanceRender(ls, rend, *inflight)
 	}
 }
@@ -173,6 +215,10 @@ func (s *Service) advanceRender(ls *liveSession, rend **turnRender, inflight []t
 // every in-flight turn, then drop the session so the next message reopens it
 // (resuming by ref). On a deliberate stop (ctx cancelled) it stays quiet.
 func (s *Service) streamSessionDied(ctx context.Context, ls *liveSession, inflight *[]turnReq, rend **turnRender) {
+	// A continuation's background work died with the process: flush whatever it
+	// produced, but it owns no inflight entry, so the per-turn loop below won't
+	// touch its status — clear it here unless a queued turn will report the error.
+	cont := *rend != nil && (*rend).continuation
 	if *rend != nil {
 		(*rend).finalizeTools(ctx)
 		(*rend).flushPending(ctx, true)
@@ -192,7 +238,7 @@ func (s *Service) streamSessionDied(ctx context.Context, ls *liveSession, inflig
 		}
 		ls.idle.Done()
 	}
-	if quiet {
+	if quiet || (cont && len(*inflight) == 0) {
 		s.clearGlobalWorking(ctx, ls)
 	}
 	*inflight = (*inflight)[:0]
