@@ -57,7 +57,9 @@ func (d Claude) streamArgs(o OpenOpts) []string {
 }
 
 // askMCPConfig builds the --mcp-config JSON registering quack's ask_user server
-// for this session (the token routes a tool call back to its thread).
+// for this session (the token routes a tool call back to its thread). The call
+// returns immediately (the answer comes later as a new turn), so no per-server
+// tool-call timeout is needed.
 func askMCPConfig(baseURL, token string) string {
 	cfg := map[string]any{
 		"mcpServers": map[string]any{

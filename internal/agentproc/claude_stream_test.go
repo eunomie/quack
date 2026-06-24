@@ -7,6 +7,20 @@ import (
 	"testing"
 )
 
+func TestAskMCPConfig(t *testing.T) {
+	// The config registers quack's http server with the session token on the URL
+	// and no per-server timeout (the call returns immediately).
+	cfg := askMCPConfig("http://127.0.0.1:9/mcp", "tok-1")
+	for _, want := range []string{`"type":"http"`, "?s=tok-1", `"quack"`} {
+		if !strings.Contains(cfg, want) {
+			t.Errorf("config missing %q in: %s", want, cfg)
+		}
+	}
+	if strings.Contains(cfg, "timeout") {
+		t.Errorf("config should carry no per-server timeout: %s", cfg)
+	}
+}
+
 func TestClaudeStreamArgs(t *testing.T) {
 	d := Claude{
 		Command:        "claude",
