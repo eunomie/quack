@@ -61,6 +61,10 @@ type Replier interface {
 	ArchiveThread(ctx context.Context, threadID string) error
 	React(ctx context.Context, channelID, messageID, emoji string) error
 	Unreact(ctx context.Context, channelID, messageID, emoji string) error
+	// Typing shows the bot as "typing…" in the channel for ~10s (Discord's
+	// indicator auto-expires), cleared early when the bot posts. Re-trigger it to
+	// keep the indicator alive across a long turn.
+	Typing(ctx context.Context, channelID string) error
 }
 
 // Message is one recent Discord message, used as context for the fluent infer step.

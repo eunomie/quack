@@ -18,6 +18,7 @@ import (
 // is waiting.
 func (s *Service) runStreamLoop(ctx context.Context, ls *liveSession) {
 	defer func() {
+		ls.typing.stop() // belt-and-suspenders if we exit mid-turn
 		if ls.sess != nil {
 			_ = ls.sess.Close()
 		}
@@ -98,6 +99,7 @@ func (s *Service) streamBegin(ctx context.Context, ls *liveSession, inflight *[]
 	*inflight = append(*inflight, tr)
 	if wasEmpty {
 		*rend = newTurnRender(s, ls)
+		ls.typing = startTypingPump(s.reply, ls.threadID)
 	}
 }
 
@@ -166,6 +168,8 @@ func (s *Service) advanceRender(ls *liveSession, rend **turnRender, inflight []t
 		*rend = newTurnRender(s, ls)
 	} else {
 		*rend = nil
+		ls.typing.stop() // the burst drained; stop the typing indicator
+		ls.typing = nil
 	}
 }
 
@@ -197,6 +201,8 @@ func (s *Service) streamSessionDied(ctx context.Context, ls *liveSession, inflig
 	}
 	*inflight = (*inflight)[:0]
 	*rend = nil
+	ls.typing.stop()
+	ls.typing = nil
 	_ = ls.sess.Close()
 	ls.sess = nil
 }
