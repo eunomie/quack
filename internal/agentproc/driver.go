@@ -48,6 +48,19 @@ type TurnDone struct {
 	Err        error
 }
 
+// discordFormatNudge tells the agent that its replies render as Discord
+// messages, whose Markdown is only a subset of the full flavor, so it should not
+// reach for syntax Discord shows as literal text. Both drivers apply it on every
+// turn (including resume), so it holds across a long session and reaches sessions
+// that predate it — claude via --append-system-prompt, codex (which has no
+// system-prompt flag) by prepending it to the turn prompt.
+const discordFormatNudge = "Your replies are posted as Discord messages, which render only a subset of " +
+	"Markdown. Use Discord message formatting, not full Markdown. Supported: **bold**, *italics*, " +
+	"__underline__, ~~strikethrough~~, `inline code`, ```fenced code blocks```, > blockquotes, " +
+	"- bullet and 1. numbered lists, # / ## / ### headings, [masked](https://links), and ||spoilers||. " +
+	"Not supported, so avoid these — they show up as literal text: tables, --- / *** horizontal rules, " +
+	"indented or nested sub-lists, footnotes, and ![image](embeds). Keep replies concise and chat-like."
+
 // Driver runs one turn as a headless child, emitting in-flight Events via emit
 // and returning the terminal TurnDone.
 type Driver interface {
